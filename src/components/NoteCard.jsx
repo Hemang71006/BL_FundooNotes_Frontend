@@ -4,28 +4,21 @@
  * Module: NoteCard
  * Author: Hemang
  * Date: 24-11-2026
- * Description: Displays an individual note and its pin action.
+ * Description: Displays an individual note and its pinned status.
  */
 
-function NoteCard({ note, onTogglePin }) {
+function NoteCard({ note }) {
+  const title = note.title?.trim() || 'Untitled note'
+  const description = note.description?.trim() || 'No description'
+
   return (
     <article className={`note-card ${note.pinned ? 'pinned' : ''}`}>
       <div className="note-card-header">
-        <h3>{note.title}</h3>
-
-        <button
-          type="button"
-          className="pin-button"
-          onClick={() => onTogglePin(note.id)}
-          aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
-        >
-          {note.pinned ? '📌' : '📍'}
-        </button>
+        <h3>{title}</h3>
+        {note.pinned && <span className="pin-indicator" title="Pinned note" aria-label="Pinned note">Pinned</span>}
       </div>
 
-      <p>{note.description}</p>
-
-      <span className="note-date">{note.date}</span>
+      <p>{description}</p>
     </article>
   )
 }
