@@ -1,121 +1,94 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+
+import { useEffect, useState } from 'react'
+import Navbar from './components/Navbar'
+import SearchBar from './components/SearchBar'
+import NoteList from './components/NoteList'
 import './App.css'
 
+/*
+ * Project: Fundoo Notes Frontend
+ * Module: App
+ * Author: Hemang
+ * Date: 24-11-2026
+ * Description: Main application component demonstrating React fundamentals.
+ */
+
+const initialNotes = [
+  {
+    id: 1,
+    title: 'Welcome to Fundoo Notes',
+    description: 'This is your personal space to capture ideas and important thoughts.',
+    pinned: true,
+    date: '24 Nov 2026',
+  },
+  {
+    id: 2,
+    title: 'Learn React',
+    description: 'Understand components, JSX, props, state and React hooks.',
+    pinned: false,
+    date: '24 Nov 2026',
+  },
+  {
+    id: 3,
+    title: 'Project Tasks',
+    description: 'Build authentication, dashboard and note management features.',
+    pinned: false,
+    date: '24 Nov 2026',
+  },
+]
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [notes, setNotes] = useState(initialNotes)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  useEffect(() => {
+    document.title = 'Fundoo Notes'
+  }, [])
+
+  const filteredNotes = notes.filter((note) => {
+    const query = searchQuery.toLowerCase()
+
+    return (
+      note.title.toLowerCase().includes(query) ||
+      note.description.toLowerCase().includes(query)
+    )
+  })
+
+  const handleTogglePin = (noteId) => {
+    setNotes((previousNotes) =>
+      previousNotes.map((note) =>
+        note.id === noteId
+          ? { ...note, pinned: !note.pinned }
+          : note
+      )
+    )
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app-container">
+      <Navbar />
 
-      <div className="ticks"></div>
+      <main className="main-content">
+        <section className="welcome-section">
+          <h1>Your Notes</h1>
+          <p>Organize your thoughts in one place.</p>
+        </section>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <SearchBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        <section className="notes-section">
+          <h2>All Notes ({filteredNotes.length})</h2>
+
+          <NoteList
+            notes={filteredNotes}
+            onTogglePin={handleTogglePin}
+          />
+        </section>
+      </main>
+    </div>
   )
 }
 
