@@ -2,6 +2,8 @@ import { useState } from 'react'
 import AuthInput from '../components/auth/AuthInput'
 import PasswordInput from '../components/auth/PasswordInput'
 import AuthLayout from '../components/auth/AuthLayout'
+import { getApiErrorDetails } from '../utils/apiError'
+import { loginUser } from '../services/authService'
 import { validateEmail } from '../utils/validators'
 
 /*
@@ -17,8 +19,10 @@ function LoginPage({ onNavigate }) {
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState({})
   const [submitted, setSubmitted] = useState(false)
+  const [apiError, setApiError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
     const nextErrors = {
@@ -27,7 +31,32 @@ function LoginPage({ onNavigate }) {
     }
 
     setErrors(nextErrors)
-    setSubmitted(Object.values(nextErrors).every((error) => !error))
+    setApiError('')
+
+    if (!Object.values(nextErrors).every((error) => !error)) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await loginUser({
+        email: email.trim(),
+        password,
+      })
+      setSubmitted(true)
+      setApiError(response.data.message || 'Login successful')
+    } catch (error) {
+      const details = getApiErrorDetails(error)
+      setSubmitted(false)
+      setApiError(details.message)
+      setErrors((current) => ({
+        ...current,
+        ...details.validationErrors,
+      }))
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -45,6 +74,7 @@ function LoginPage({ onNavigate }) {
           onChange={(value) => {
             setEmail(value)
             setSubmitted(false)
+            setApiError('')
           }}
           error={errors.email}
           placeholder="you@example.com"
@@ -59,6 +89,7 @@ function LoginPage({ onNavigate }) {
           onChange={(value) => {
             setPassword(value)
             setSubmitted(false)
+            setApiError('')
           }}
           error={errors.password}
           placeholder="Enter your password"
@@ -75,11 +106,15 @@ function LoginPage({ onNavigate }) {
 
         {submitted && (
           <p className="auth-success" role="status">
-            Login details are valid.
+            {apiError}
           </p>
         )}
 
-        <button type="submit" className="auth-primary-button">Log in</button>
+        {!submitted && apiError && <p className="auth-error" role="alert">{apiError}</p>}
+
+        <button type="submit" className="auth-primary-button" disabled={loading}>
+          {loading ? 'Logging in...' : 'Log in'}
+        </button>
       </form>
 
       <p className="auth-link-copy">
