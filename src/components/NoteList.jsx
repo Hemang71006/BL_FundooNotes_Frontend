@@ -9,7 +9,7 @@ import NoteCard from './NoteCard'
  * Description: Renders a collection of notes.
  */
 
-function NoteList({ notes, onTogglePin }) {
+function NoteList({ notes }) {
   if (notes.length === 0) {
     return <p className="empty-message">No notes found.</p>
   }
@@ -20,7 +20,6 @@ function NoteList({ notes, onTogglePin }) {
         <NoteCard
           key={note.id}
           note={note}
-          onTogglePin={onTogglePin}
         />
       ))}
     </div>

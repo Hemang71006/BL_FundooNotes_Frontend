@@ -1,10 +1,9 @@
 
 import { useEffect, useState } from 'react'
 import Navbar from './components/Navbar'
-import SearchBar from './components/SearchBar'
-import NoteList from './components/NoteList'
 import ProtectedRoute from './components/ProtectedRoute'
 import { useAuth } from './hooks/useAuth'
+import DashboardPage from './pages/DashboardPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
@@ -19,58 +18,13 @@ import './App.css'
  * Description: Main application component demonstrating React fundamentals.
  */
 
-const initialNotes = [
-  {
-    id: 1,
-    title: 'Welcome to Fundoo Notes',
-    description: 'This is your personal space to capture ideas and important thoughts.',
-    pinned: true,
-    date: '24 Nov 2026',
-  },
-  {
-    id: 2,
-    title: 'Learn React',
-    description: 'Understand components, JSX, props, state and React hooks.',
-    pinned: false,
-    date: '24 Nov 2026',
-  },
-  {
-    id: 3,
-    title: 'Project Tasks',
-    description: 'Build authentication, dashboard and note management features.',
-    pinned: false,
-    date: '24 Nov 2026',
-  },
-]
-
 function App() {
   const { isAuthenticated, isRestoring, logout } = useAuth()
-  const [notes, setNotes] = useState(initialNotes)
-  const [searchQuery, setSearchQuery] = useState('')
   const [authView, setAuthView] = useState(null)
 
   useEffect(() => {
     document.title = 'Fundoo Notes'
   }, [])
-
-  const filteredNotes = notes.filter((note) => {
-    const query = searchQuery.toLowerCase()
-
-    return (
-      note.title.toLowerCase().includes(query) ||
-      note.description.toLowerCase().includes(query)
-    )
-  })
-
-  const handleTogglePin = (noteId) => {
-    setNotes((previousNotes) =>
-      previousNotes.map((note) =>
-        note.id === noteId
-          ? { ...note, pinned: !note.pinned }
-          : note
-      )
-    )
-  }
 
   const handleLogout = async () => {
     await logout()
@@ -108,27 +62,7 @@ function App() {
             onRegister: () => setAuthView('register'),
           }}
         />
-
-        <main className="main-content">
-          <section className="welcome-section">
-            <h1>Your Notes</h1>
-            <p>Organize your thoughts in one place.</p>
-          </section>
-
-          <SearchBar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-          />
-
-          <section className="notes-section">
-            <h2>All Notes ({filteredNotes.length})</h2>
-
-            <NoteList
-              notes={filteredNotes}
-              onTogglePin={handleTogglePin}
-            />
-          </section>
-        </main>
+        <DashboardPage />
       </div>
     </ProtectedRoute>
   )

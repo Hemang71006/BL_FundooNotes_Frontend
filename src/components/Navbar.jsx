@@ -14,6 +14,14 @@ function Navbar({ authActions }) {
         <span className="navbar-logo">F</span>
         <h2>Fundoo Notes</h2>
       </div>
+      <div className="navbar-search">
+        <input
+          type="search"
+          placeholder="Search notes..."
+          aria-label="Search notes"
+          readOnly
+        />
+      </div>
       {authActions?.onLogout ? (
         <div className="navbar-auth-actions">
           <button type="button" className="navbar-register" onClick={authActions.onLogout}>
