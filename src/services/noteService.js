@@ -11,3 +11,15 @@ import apiClient from './apiClient'
 export function getAllNotes() {
   return apiClient.get('/notes')
 }
+
+export function createNote(noteData) {
+  return apiClient.post('/notes', noteData)
+}
+
+export function getNoteById(noteId) {
+  return apiClient.get(`/notes/${noteId}`)
+}
+
+export function updateNote(noteId, noteData) {
+  return apiClient.put(`/notes/${noteId}`, noteData)
+}
