@@ -2,6 +2,8 @@ import { useState } from 'react'
 import AuthInput from '../components/auth/AuthInput'
 import PasswordInput from '../components/auth/PasswordInput'
 import AuthLayout from '../components/auth/AuthLayout'
+import { getApiErrorDetails } from '../utils/apiError'
+import { registerUser } from '../services/authService'
 import {
   validateConfirmPassword,
   validateEmail,
@@ -27,13 +29,16 @@ function RegisterPage({ onNavigate }) {
   })
   const [errors, setErrors] = useState({})
   const [submitted, setSubmitted] = useState(false)
+  const [apiError, setApiError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
     setSubmitted(false)
+    setApiError('')
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
     const nextErrors = {
@@ -45,9 +50,31 @@ function RegisterPage({ onNavigate }) {
     }
 
     setErrors(nextErrors)
+    setApiError('')
 
-    if (Object.values(nextErrors).every((error) => !error)) {
+    if (!Object.values(nextErrors).every((error) => !error)) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      await registerUser({
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim(),
+        password: form.password,
+      })
       setSubmitted(true)
+    } catch (error) {
+      const details = getApiErrorDetails(error)
+      setApiError(details.message)
+      setErrors((current) => ({
+        ...current,
+        ...details.validationErrors,
+      }))
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -117,11 +144,15 @@ function RegisterPage({ onNavigate }) {
 
         {submitted && (
           <p className="auth-success" role="status">
-            Registration details are valid.
+            Account created successfully. You can now log in.
           </p>
         )}
 
-        <button type="submit" className="auth-primary-button">Create account</button>
+        {apiError && <p className="auth-error" role="alert">{apiError}</p>}
+
+        <button type="submit" className="auth-primary-button" disabled={loading}>
+          {loading ? 'Creating account...' : 'Create account'}
+        </button>
       </form>
 
       <p className="auth-link-copy">

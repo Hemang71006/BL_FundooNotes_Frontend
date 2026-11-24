@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import AuthInput from '../components/auth/AuthInput'
 import AuthLayout from '../components/auth/AuthLayout'
+import { getApiErrorDetails } from '../utils/apiError'
+import { requestPasswordReset } from '../services/authService'
 import { validateEmail } from '../utils/validators'
 
 /*
@@ -15,13 +17,34 @@ function ForgotPasswordPage({ onNavigate }) {
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [apiError, setApiError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
     const nextError = validateEmail(email)
 
     setError(nextError)
-    setSubmitted(!nextError)
+    setApiError('')
+
+    if (nextError) {
+      setSubmitted(false)
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await requestPasswordReset({ email: email.trim() })
+      setSubmitted(true)
+      setApiError(response.data)
+    } catch (requestError) {
+      const details = getApiErrorDetails(requestError)
+      setSubmitted(false)
+      setApiError(details.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -39,6 +62,7 @@ function ForgotPasswordPage({ onNavigate }) {
           onChange={(value) => {
             setEmail(value)
             setSubmitted(false)
+            setApiError('')
           }}
           error={error}
           placeholder="you@example.com"
@@ -48,11 +72,15 @@ function ForgotPasswordPage({ onNavigate }) {
 
         {submitted && (
           <p className="auth-success" role="status">
-            Password recovery details are valid.
+            {apiError}
           </p>
         )}
 
-        <button type="submit" className="auth-primary-button">Continue</button>
+        {!submitted && apiError && <p className="auth-error" role="alert">{apiError}</p>}
+
+        <button type="submit" className="auth-primary-button" disabled={loading}>
+          {loading ? 'Sending...' : 'Continue'}
+        </button>
       </form>
 
       <p className="auth-link-copy">

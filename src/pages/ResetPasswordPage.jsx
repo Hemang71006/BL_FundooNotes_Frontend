@@ -2,6 +2,8 @@ import { useState } from 'react'
 import AuthInput from '../components/auth/AuthInput'
 import PasswordInput from '../components/auth/PasswordInput'
 import AuthLayout from '../components/auth/AuthLayout'
+import { getApiErrorDetails } from '../utils/apiError'
+import { resetPassword } from '../services/authService'
 import {
   validateConfirmPassword,
   validateEmail,
@@ -26,13 +28,16 @@ function ResetPasswordPage({ onNavigate }) {
   })
   const [errors, setErrors] = useState({})
   const [submitted, setSubmitted] = useState(false)
+  const [apiError, setApiError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
     setSubmitted(false)
+    setApiError('')
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
     const nextErrors = {
@@ -43,7 +48,33 @@ function ResetPasswordPage({ onNavigate }) {
     }
 
     setErrors(nextErrors)
-    setSubmitted(Object.values(nextErrors).every((error) => !error))
+    setApiError('')
+
+    if (!Object.values(nextErrors).every((error) => !error)) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await resetPassword({
+        email: form.email.trim(),
+        otp: form.otp,
+        newPassword: form.newPassword,
+      })
+      setSubmitted(true)
+      setApiError(response.data)
+    } catch (error) {
+      const details = getApiErrorDetails(error)
+      setSubmitted(false)
+      setApiError(details.message)
+      setErrors((current) => ({
+        ...current,
+        ...details.validationErrors,
+      }))
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -98,11 +129,15 @@ function ResetPasswordPage({ onNavigate }) {
 
         {submitted && (
           <p className="auth-success" role="status">
-            Reset password details are valid.
+            {apiError}
           </p>
         )}
 
-        <button type="submit" className="auth-primary-button">Reset password</button>
+        {!submitted && apiError && <p className="auth-error" role="alert">{apiError}</p>}
+
+        <button type="submit" className="auth-primary-button" disabled={loading}>
+          {loading ? 'Resetting password...' : 'Reset password'}
+        </button>
       </form>
 
       <p className="auth-link-copy">
