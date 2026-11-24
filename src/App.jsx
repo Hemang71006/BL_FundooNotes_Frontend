@@ -3,6 +3,10 @@ import { useEffect, useState } from 'react'
 import Navbar from './components/Navbar'
 import SearchBar from './components/SearchBar'
 import NoteList from './components/NoteList'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import './App.css'
 
 /*
@@ -40,6 +44,7 @@ const initialNotes = [
 function App() {
   const [notes, setNotes] = useState(initialNotes)
   const [searchQuery, setSearchQuery] = useState('')
+  const [authView, setAuthView] = useState(null)
 
   useEffect(() => {
     document.title = 'Fundoo Notes'
@@ -64,9 +69,30 @@ function App() {
     )
   }
 
+  if (authView === 'login') {
+    return <LoginPage onNavigate={setAuthView} />
+  }
+
+  if (authView === 'register') {
+    return <RegisterPage onNavigate={setAuthView} />
+  }
+
+  if (authView === 'forgot-password') {
+    return <ForgotPasswordPage onNavigate={setAuthView} />
+  }
+
+  if (authView === 'reset-password') {
+    return <ResetPasswordPage onNavigate={setAuthView} />
+  }
+
   return (
     <div className="app-container">
-      <Navbar />
+      <Navbar
+        authActions={{
+          onLogin: () => setAuthView('login'),
+          onRegister: () => setAuthView('register'),
+        }}
+      />
 
       <main className="main-content">
         <section className="welcome-section">
