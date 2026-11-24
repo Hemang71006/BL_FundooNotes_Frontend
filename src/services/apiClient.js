@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { API_BASE_URL } from '../config/apiConfig'
+import { getAuthSession } from '../utils/token'
 
 /*
  * Project: Fundoo Notes Frontend
@@ -16,5 +17,45 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
+let unauthorizedHandler = null
+
+const publicAuthPaths = [
+  '/users/register',
+  '/auth/login',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+]
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler
+}
+
+apiClient.interceptors.request.use((config) => {
+  const isPublicAuthRequest = publicAuthPaths.some((path) =>
+    config.url?.startsWith(path)
+  )
+
+  if (!isPublicAuthRequest) {
+    const session = getAuthSession()
+    if (session?.token) {
+      config.headers.Authorization = `Bearer ${session.token}`
+    }
+  }
+
+  return config
+})
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && error.config && !error.config.__authHandled) {
+      error.config.__authHandled = true
+      unauthorizedHandler?.()
+    }
+
+    return Promise.reject(error)
+  }
+)
 
 export default apiClient

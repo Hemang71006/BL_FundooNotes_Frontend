@@ -243,6 +243,13 @@
   text-align: center;
 }
 
+.auth-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #777777;
+}
+
 .auth-primary-button:disabled {
   cursor: wait;
   opacity: 0.65;

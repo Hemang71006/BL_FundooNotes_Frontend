@@ -3,7 +3,7 @@ import AuthInput from '../components/auth/AuthInput'
 import PasswordInput from '../components/auth/PasswordInput'
 import AuthLayout from '../components/auth/AuthLayout'
 import { getApiErrorDetails } from '../utils/apiError'
-import { loginUser } from '../services/authService'
+import { useAuth } from '../hooks/useAuth'
 import { validateEmail } from '../utils/validators'
 
 /*
@@ -11,10 +11,11 @@ import { validateEmail } from '../utils/validators'
  * Module: Login Page
  * Author: Hemang
  * Date: 24-11-2026
- * Description: Provides validated login form UI without authentication API calls.
+ * Description: Provides validated login form UI integrated with centralized authentication state.
  */
 
 function LoginPage({ onNavigate }) {
+  const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState({})
@@ -40,12 +41,13 @@ function LoginPage({ onNavigate }) {
     setLoading(true)
 
     try {
-      const response = await loginUser({
+      const response = await login({
         email: email.trim(),
         password,
       })
       setSubmitted(true)
-      setApiError(response.data.message || 'Login successful')
+      setApiError(response.message || 'Login successful')
+      onNavigate('dashboard')
     } catch (error) {
       const details = getApiErrorDetails(error)
       setSubmitted(false)
