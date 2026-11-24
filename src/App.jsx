@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import Navbar from './components/Navbar'
 import SearchBar from './components/SearchBar'
 import NoteList from './components/NoteList'
+import ProtectedRoute from './components/ProtectedRoute'
+import { useAuth } from './hooks/useAuth'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
@@ -42,6 +44,7 @@ const initialNotes = [
 ]
 
 function App() {
+  const { isAuthenticated, isRestoring, logout } = useAuth()
   const [notes, setNotes] = useState(initialNotes)
   const [searchQuery, setSearchQuery] = useState('')
   const [authView, setAuthView] = useState(null)
@@ -69,6 +72,11 @@ function App() {
     )
   }
 
+  const handleLogout = async () => {
+    await logout()
+    setAuthView('login')
+  }
+
   if (authView === 'login') {
     return <LoginPage onNavigate={setAuthView} />
   }
@@ -86,35 +94,43 @@ function App() {
   }
 
   return (
-    <div className="app-container">
-      <Navbar
-        authActions={{
-          onLogin: () => setAuthView('login'),
-          onRegister: () => setAuthView('register'),
-        }}
-      />
-
-      <main className="main-content">
-        <section className="welcome-section">
-          <h1>Your Notes</h1>
-          <p>Organize your thoughts in one place.</p>
-        </section>
-
-        <SearchBar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
+    <ProtectedRoute
+      onUnauthenticated={() => {
+        if (!isRestoring) setAuthView('login')
+      }}
+    >
+      <div className="app-container">
+        <Navbar
+          authActions={isAuthenticated ? {
+            onLogout: handleLogout,
+          } : {
+            onLogin: () => setAuthView('login'),
+            onRegister: () => setAuthView('register'),
+          }}
         />
 
-        <section className="notes-section">
-          <h2>All Notes ({filteredNotes.length})</h2>
+        <main className="main-content">
+          <section className="welcome-section">
+            <h1>Your Notes</h1>
+            <p>Organize your thoughts in one place.</p>
+          </section>
 
-          <NoteList
-            notes={filteredNotes}
-            onTogglePin={handleTogglePin}
+          <SearchBar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
           />
-        </section>
-      </main>
-    </div>
+
+          <section className="notes-section">
+            <h2>All Notes ({filteredNotes.length})</h2>
+
+            <NoteList
+              notes={filteredNotes}
+              onTogglePin={handleTogglePin}
+            />
+          </section>
+        </main>
+      </div>
+    </ProtectedRoute>
   )
 }
 
