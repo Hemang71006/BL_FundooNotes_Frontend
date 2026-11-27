@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import NoteList from '../components/NoteList'
 import Sidebar from '../components/Sidebar'
 import NoteEditor from '../components/NoteEditor'
 import NoteModal from '../components/NoteModal'
 import LabelManager from '../components/LabelManager'
+import RemindersPage from './RemindersPage'
 import {
   archiveNote,
   createNote,
@@ -14,6 +15,7 @@ import {
   getTrashedNotes,
   pinNote,
   restoreNote,
+  searchNotes,
   trashNote,
   unarchiveNote,
   unpinNote,
@@ -28,7 +30,14 @@ import {
 } from '../services/labelService'
 import { getApiErrorDetails } from '../utils/apiError'
 
-function fetchNotesForView(view, selectedLabel) {
+function fetchNotesForView(view, selectedLabel, keyword = '') {
+  const status = view === 'Archive'
+    ? 'ARCHIVED'
+    : view === 'Trash'
+      ? 'TRASHED'
+      : 'ACTIVE'
+
+  if (keyword) return searchNotes(keyword, status, selectedLabel?.id)
   if (view === 'Archive') return getArchivedNotes()
   if (view === 'Trash') return getTrashedNotes()
   if (view === 'Label' && selectedLabel) return getNotesByLabel(selectedLabel.id)
@@ -43,7 +52,7 @@ function fetchNotesForView(view, selectedLabel) {
  * Description: Fetches and displays the authenticated user's active notes.
  */
 
-function DashboardPage() {
+function DashboardPage({ searchQuery = '' }) {
   const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -58,21 +67,34 @@ function DashboardPage() {
   const [labelsError, setLabelsError] = useState('')
   const [labelsRetryKey, setLabelsRetryKey] = useState(0)
   const [managingLabels, setManagingLabels] = useState(false)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [remindersRefreshKey, setRemindersRefreshKey] = useState(0)
+  const notesRequestRef = useRef(0)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   useEffect(() => {
     let cancelled = false
+    const requestVersion = ++notesRequestRef.current
 
     async function fetchNotes() {
       setLoading(true)
       setError('')
 
       try {
-        const response = await fetchNotesForView(activeView, selectedLabel)
-        if (!cancelled) setNotes(Array.isArray(response.data) ? response.data : [])
+        const response = await fetchNotesForView(activeView, selectedLabel, debouncedSearch)
+        if (!cancelled && requestVersion === notesRequestRef.current) {
+          setNotes(Array.isArray(response.data) ? response.data : [])
+        }
       } catch (requestError) {
-        if (!cancelled) setError(getApiErrorDetails(requestError).message)
+        if (!cancelled && requestVersion === notesRequestRef.current) {
+          setError(getApiErrorDetails(requestError).message)
+        }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled && requestVersion === notesRequestRef.current) setLoading(false)
       }
     }
 
@@ -81,7 +103,7 @@ function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [activeView, retryKey, selectedLabel])
+  }, [activeView, retryKey, selectedLabel, debouncedSearch])
 
   useEffect(() => {
     let cancelled = false
@@ -143,12 +165,21 @@ function DashboardPage() {
   }
 
   const refreshNotes = async () => {
+    const requestVersion = ++notesRequestRef.current
+    setLoading(true)
+    setError('')
+
     try {
-      const response = await fetchNotesForView(activeView, selectedLabel)
-      setNotes(Array.isArray(response.data) ? response.data : [])
-      setError('')
+      const response = await fetchNotesForView(activeView, selectedLabel, debouncedSearch)
+      if (requestVersion === notesRequestRef.current) {
+        setNotes(Array.isArray(response.data) ? response.data : [])
+      }
     } catch (requestError) {
-      setError(getApiErrorDetails(requestError).message)
+      if (requestVersion === notesRequestRef.current) {
+        setError(getApiErrorDetails(requestError).message)
+      }
+    } finally {
+      if (requestVersion === notesRequestRef.current) setLoading(false)
     }
   }
 
@@ -240,10 +271,12 @@ function DashboardPage() {
         labelsLoading={labelsLoading}
         labelsError={labelsError}
         onNavigate={(view) => {
+          setSuccessMessage('')
           setSelectedLabel(null)
           setActiveView(view)
         }}
         onSelectLabel={(label) => {
+          setSuccessMessage('')
           setSelectedLabel(label)
           setActiveView('Label')
         }}
@@ -254,19 +287,27 @@ function DashboardPage() {
         <div className="dashboard-heading">
           <div>
             <h1 id="notes-heading">
-              {activeView === 'Notes' ? 'Your Notes' : activeView === 'Label' ? selectedLabel?.name : activeView}
+              {activeView === 'Reminders'
+                ? 'Reminders'
+                : debouncedSearch
+                  ? 'Search results'
+                  : activeView === 'Notes' ? 'Your Notes' : activeView === 'Label' ? selectedLabel?.name : activeView}
             </h1>
             <p>
-              {activeView === 'Notes'
-                ? 'Keep your thoughts organized in one place.'
-                : activeView === 'Archive'
-                  ? 'Notes you have archived.'
-                  : activeView === 'Trash'
-                    ? 'Notes you have moved to trash.'
-                    : `Notes with the ${selectedLabel?.name || 'selected'} label.`}
+              {activeView === 'Reminders'
+                ? 'Reminders saved for your notes.'
+                : debouncedSearch
+                  ? `Notes matching "${debouncedSearch}".`
+                  : activeView === 'Notes'
+                    ? 'Keep your thoughts organized in one place.'
+                    : activeView === 'Archive'
+                      ? 'Notes you have archived.'
+                      : activeView === 'Trash'
+                        ? 'Notes you have moved to trash.'
+                        : `Notes with the ${selectedLabel?.name || 'selected'} label.`}
             </p>
           </div>
-          {activeView === 'Notes' && (
+          {activeView === 'Notes' && !debouncedSearch && (
             <button type="button" className="create-note-button" onClick={() => setCreating(true)}>
               Create note
             </button>
@@ -277,18 +318,18 @@ function DashboardPage() {
           <p className="dashboard-success" role="status">{successMessage}</p>
         )}
 
-        {loading && (
+        {activeView !== 'Reminders' && loading && (
           <p className="dashboard-status" role="status">Loading your notes...</p>
         )}
 
-        {!loading && error && (
+        {activeView !== 'Reminders' && !loading && error && (
           <div className="dashboard-error" role="alert">
             <p>{error}</p>
             <button type="button" onClick={handleRetry}>Try again</button>
           </div>
         )}
 
-        {!loading && !error && notes.length === 0 && (
+        {activeView !== 'Reminders' && !loading && !error && notes.length === 0 && (
           <div className="dashboard-empty">
             <h2>
               {activeView === 'Notes'
@@ -311,12 +352,19 @@ function DashboardPage() {
           </div>
         )}
 
-        {!loading && !error && notes.length > 0 && (
+        {activeView !== 'Reminders' && !loading && !error && notes.length > 0 && (
           <NoteList
             notes={notes}
             onOpenNote={setOpenNoteId}
             onAction={handleAction}
             view={activeView}
+          />
+        )}
+
+        {activeView === 'Reminders' && (
+          <RemindersPage
+            refreshKey={remindersRefreshKey}
+            onOpenNote={setOpenNoteId}
           />
         )}
       </section>
@@ -341,6 +389,7 @@ function DashboardPage() {
           onLabelAction={handleNoteLabelAction}
           onClose={() => setOpenNoteId(null)}
           onUpdated={handleUpdated}
+          onReminderChanged={() => setRemindersRefreshKey((current) => current + 1)}
         />
       )}
       {managingLabels && (

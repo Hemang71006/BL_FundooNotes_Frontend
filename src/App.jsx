@@ -21,6 +21,7 @@ import './App.css'
 function App() {
   const { isAuthenticated, isRestoring, logout } = useAuth()
   const [authView, setAuthView] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     document.title = 'Fundoo Notes'
@@ -28,6 +29,7 @@ function App() {
 
   const handleLogout = async () => {
     await logout()
+    setSearchQuery('')
     setAuthView('login')
   }
 
@@ -55,6 +57,8 @@ function App() {
     >
       <div className="app-container">
         <Navbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
           authActions={isAuthenticated ? {
             onLogout: handleLogout,
           } : {
@@ -62,7 +66,7 @@ function App() {
             onRegister: () => setAuthView('register'),
           }}
         />
-        <DashboardPage />
+        <DashboardPage searchQuery={searchQuery} />
       </div>
     </ProtectedRoute>
   )
