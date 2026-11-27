@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react'
 import NoteEditor from './NoteEditor'
+import ReminderForm from './ReminderForm'
+import ReminderItem from './ReminderItem'
 import { getApiErrorDetails } from '../utils/apiError'
 import { getNoteById, updateNote } from '../services/noteService'
+import {
+  cancelReminder,
+  completeReminder,
+  createReminder,
+  deleteReminder,
+  getNoteReminders,
+  updateReminder,
+} from '../services/reminderService'
 
 /*
  * Project: Fundoo Notes Frontend
@@ -20,6 +30,7 @@ function NoteModal({
   labelsError = '',
   onRetryLabels,
   onLabelAction,
+  onReminderChanged,
 }) {
   const [note, setNote] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -29,6 +40,12 @@ function NoteModal({
   const [labelAction, setLabelAction] = useState('')
   const [labelMessage, setLabelMessage] = useState('')
   const [labelError, setLabelError] = useState('')
+  const [reminders, setReminders] = useState([])
+  const [remindersLoading, setRemindersLoading] = useState(true)
+  const [remindersError, setRemindersError] = useState('')
+  const [remindersRetryKey, setRemindersRetryKey] = useState(0)
+  const [reminderForm, setReminderForm] = useState(null)
+  const [reminderMessage, setReminderMessage] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -53,6 +70,30 @@ function NoteModal({
       cancelled = true
     }
   }, [noteId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchReminders() {
+      setRemindersLoading(true)
+      setRemindersError('')
+
+      try {
+        const response = await getNoteReminders(noteId)
+        if (!cancelled) setReminders(Array.isArray(response.data) ? response.data : [])
+      } catch (requestError) {
+        if (!cancelled) setRemindersError(getApiErrorDetails(requestError).message)
+      } finally {
+        if (!cancelled) setRemindersLoading(false)
+      }
+    }
+
+    fetchReminders()
+
+    return () => {
+      cancelled = true
+    }
+  }, [noteId, remindersRetryKey])
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -92,6 +133,36 @@ function NoteModal({
     } finally {
       setLabelAction('')
     }
+  }
+
+  const notifyReminderChanged = () => {
+    setRemindersRetryKey((current) => current + 1)
+    onReminderChanged?.()
+  }
+
+  const handleReminderSave = async (reminderAt) => {
+    if (reminderForm?.reminder) {
+      await updateReminder(reminderForm.reminder.id, reminderAt)
+      setReminderMessage('Reminder updated')
+    } else {
+      await createReminder(noteId, reminderAt)
+      setReminderMessage('Reminder scheduled')
+    }
+
+    setReminderForm(null)
+    notifyReminderChanged()
+  }
+
+  const handleReminderAction = async (reminder, action) => {
+    const actions = {
+      cancel: cancelReminder,
+      complete: completeReminder,
+      delete: deleteReminder,
+    }
+
+    await actions[action](reminder.id)
+    setReminderMessage(`Reminder ${action === 'delete' ? 'deleted' : action === 'cancel' ? 'cancelled' : 'completed'}`)
+    notifyReminderChanged()
   }
 
   return (
@@ -166,12 +237,52 @@ function NoteModal({
                     {labelError && <p className="label-error" role="alert">{labelError}</p>}
                   </section>
                 )}
+                {!note?.trashed && (
+                  <section className="note-reminder-section" aria-labelledby="note-reminder-heading">
+                    <div className="reminder-section-heading">
+                      <h3 id="note-reminder-heading">Reminders</h3>
+                      <button type="button" onClick={() => setReminderForm({})}>Set reminder</button>
+                    </div>
+                    {reminderMessage && <p className="label-success" role="status">{reminderMessage}</p>}
+                    {remindersLoading && <p className="note-modal-status" role="status">Loading reminders...</p>}
+                    {!remindersLoading && remindersError && (
+                      <div className="note-modal-error" role="alert">
+                        <p>{remindersError}</p>
+                        <button type="button" onClick={() => setRemindersRetryKey((current) => current + 1)}>
+                          Retry reminders
+                        </button>
+                      </div>
+                    )}
+                    {!remindersLoading && !remindersError && reminders.length === 0 && (
+                      <p className="note-modal-status">No reminders are set for this note.</p>
+                    )}
+                    {!remindersLoading && !remindersError && reminders.length > 0 && (
+                      <div className="reminder-list">
+                        {reminders.map((reminder) => (
+                          <ReminderItem
+                            key={reminder.id}
+                            reminder={reminder}
+                            onEdit={(selectedReminder) => setReminderForm({ reminder: selectedReminder })}
+                            onAction={handleReminderAction}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
                 <div className="note-modal-actions">
                   <button type="button" onClick={() => setEditing(true)}>Edit</button>
                 </div>
               </>
             )}
           </>
+        )}
+        {!editing && reminderForm && (
+          <ReminderForm
+            reminder={reminderForm.reminder}
+            onSave={handleReminderSave}
+            onCancel={() => setReminderForm(null)}
+          />
         )}
       </section>
     </div>

@@ -68,3 +68,13 @@ export function getNotesByLabel(labelId) {
     },
   })
 }
+
+export function searchNotes(keyword, status = 'ACTIVE', labelId) {
+  return apiClient.get('/notes/search', {
+    params: {
+      keyword,
+      status,
+      ...(labelId ? { labelId } : {}),
+    },
+  })
+}

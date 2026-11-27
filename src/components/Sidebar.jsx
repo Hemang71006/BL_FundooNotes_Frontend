@@ -3,7 +3,7 @@
  * Module: Dashboard Sidebar
  * Author: Hemang
  * Date: 24-11-2026
- * Description: Displays dashboard navigation items without invoking future feature APIs.
+ * Description: Displays dashboard navigation items and the authenticated user's labels.
  */
 
 function Sidebar({
@@ -28,12 +28,11 @@ function Sidebar({
             type="button"
             className={item === activeItem && !selectedLabelId ? 'sidebar-item active' : 'sidebar-item'}
             aria-current={item === activeItem ? 'page' : undefined}
-            disabled={item === 'Reminders'}
             onClick={() => {
               onNavigate?.(item)
             }}
           >
-            <span aria-hidden="true">{item === 'Notes' ? '▣' : '○'}</span>
+            <span aria-hidden="true">{item === 'Notes' ? '▣' : item === 'Reminders' ? '◷' : '○'}</span>
             {item}
           </button>
         ))}

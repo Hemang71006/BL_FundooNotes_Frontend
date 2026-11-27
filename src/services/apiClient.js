@@ -27,16 +27,16 @@ const publicAuthPaths = [
   '/auth/reset-password',
 ]
 
+function isPublicAuthRequest(url) {
+  return publicAuthPaths.some((path) => url?.startsWith(path))
+}
+
 export function setUnauthorizedHandler(handler) {
   unauthorizedHandler = handler
 }
 
 apiClient.interceptors.request.use((config) => {
-  const isPublicAuthRequest = publicAuthPaths.some((path) =>
-    config.url?.startsWith(path)
-  )
-
-  if (!isPublicAuthRequest) {
+  if (!isPublicAuthRequest(config.url)) {
     const session = getAuthSession()
     if (session?.token) {
       config.headers.Authorization = `Bearer ${session.token}`
@@ -49,7 +49,12 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && error.config && !error.config.__authHandled) {
+    if (
+      error.response?.status === 401
+      && error.config
+      && !error.config.__authHandled
+      && !isPublicAuthRequest(error.config.url)
+    ) {
       error.config.__authHandled = true
       unauthorizedHandler?.()
     }

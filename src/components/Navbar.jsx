@@ -7,7 +7,7 @@
  * Description: Displays the application navigation header.
  */
 
-function Navbar({ authActions }) {
+function Navbar({ authActions, searchQuery = '', onSearchChange }) {
   return (
     <header className="navbar">
       <div className="navbar-brand">
@@ -19,7 +19,8 @@ function Navbar({ authActions }) {
           type="search"
           placeholder="Search notes..."
           aria-label="Search notes"
-          readOnly
+          value={searchQuery}
+          onChange={(event) => onSearchChange?.(event.target.value)}
         />
       </div>
       {authActions?.onLogout ? (
