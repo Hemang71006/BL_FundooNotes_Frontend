@@ -59,3 +59,12 @@ export function getArchivedNotes() {
 export function getTrashedNotes() {
   return apiClient.get('/notes/trash')
 }
+
+export function getNotesByLabel(labelId) {
+  return apiClient.get('/notes/search', {
+    params: {
+      labelId,
+      status: 'ACTIVE',
+    },
+  })
+}
