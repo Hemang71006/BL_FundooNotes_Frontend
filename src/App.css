@@ -316,6 +316,18 @@
   font-weight: 700;
 }
 
+.sidebar-item:not(:disabled):not(.active) {
+  cursor: pointer;
+}
+
+.sidebar-item:not(:disabled):hover {
+  background: #f5f5f5;
+}
+
+.sidebar-item:disabled {
+  opacity: 0.6;
+}
+
 .dashboard-content {
   flex: 1;
   min-width: 0;
@@ -446,6 +458,23 @@
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
+.note-card-content {
+  display: block;
+  width: 100%;
+  min-height: 92px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.note-card-content:focus-visible {
+  outline: 2px solid #fbbc04;
+  outline-offset: 4px;
+}
+
 .note-card:hover {
   transform: translateY(-3px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
@@ -462,6 +491,24 @@
   gap: 10px;
 }
 
+.note-card-title {
+  min-width: 0;
+  color: #333333;
+  font-size: 17px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.note-card-description {
+  display: block;
+  margin-top: 14px;
+  color: #666666;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .pin-indicator {
   flex-shrink: 0;
   padding: 4px 8px;
@@ -470,6 +517,46 @@
   color: #5f4700;
   font-size: 11px;
   font-weight: 700;
+}
+
+.note-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #eeeeee;
+}
+
+.note-card-actions button {
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid #e2e2e2;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #555555;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.note-card-actions button:hover:not(:disabled) {
+  background: #f7f7f7;
+}
+
+.note-card-actions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.note-card-actions .note-delete-action {
+  border-color: #e7b5af;
+  color: #b42318;
+}
+
+.note-action-error {
+  margin-top: 10px;
+  color: #b42318;
+  font-size: 12px;
 }
 
 .note-modal-backdrop {

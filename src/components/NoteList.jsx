@@ -9,7 +9,7 @@ import NoteCard from './NoteCard'
  * Description: Renders a collection of notes.
  */
 
-function NoteList({ notes, onOpenNote }) {
+function NoteList({ notes, onOpenNote, onAction, view = 'Notes' }) {
   if (notes.length === 0) {
     return <p className="empty-message">No notes found.</p>
   }
@@ -21,6 +21,8 @@ function NoteList({ notes, onOpenNote }) {
           key={note.id}
           note={note}
           onOpen={onOpenNote}
+          onAction={onAction}
+          view={view}
         />
       ))}
     </div>

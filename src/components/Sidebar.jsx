@@ -6,7 +6,7 @@
  * Description: Displays dashboard navigation items without invoking future feature APIs.
  */
 
-function Sidebar({ activeItem = 'Notes' }) {
+function Sidebar({ activeItem = 'Notes', onNavigate }) {
   const items = ['Notes', 'Reminders', 'Archive', 'Trash']
 
   return (
@@ -18,7 +18,8 @@ function Sidebar({ activeItem = 'Notes' }) {
             type="button"
             className={item === activeItem ? 'sidebar-item active' : 'sidebar-item'}
             aria-current={item === activeItem ? 'page' : undefined}
-            disabled={item !== activeItem}
+            disabled={item === 'Reminders'}
+            onClick={() => onNavigate?.(item)}
           >
             <span aria-hidden="true">{item === 'Notes' ? '▣' : '○'}</span>
             {item}

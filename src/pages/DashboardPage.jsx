@@ -3,7 +3,19 @@ import NoteList from '../components/NoteList'
 import Sidebar from '../components/Sidebar'
 import NoteEditor from '../components/NoteEditor'
 import NoteModal from '../components/NoteModal'
-import { createNote, getAllNotes } from '../services/noteService'
+import {
+  archiveNote,
+  createNote,
+  deleteNote,
+  getAllNotes,
+  getArchivedNotes,
+  getTrashedNotes,
+  pinNote,
+  restoreNote,
+  trashNote,
+  unarchiveNote,
+  unpinNote,
+} from '../services/noteService'
 import { getApiErrorDetails } from '../utils/apiError'
 
 /*
@@ -22,6 +34,7 @@ function DashboardPage() {
   const [creating, setCreating] = useState(false)
   const [openNoteId, setOpenNoteId] = useState(null)
   const [successMessage, setSuccessMessage] = useState('')
+  const [activeView, setActiveView] = useState('Notes')
 
   useEffect(() => {
     let cancelled = false
@@ -31,7 +44,12 @@ function DashboardPage() {
       setError('')
 
       try {
-        const response = await getAllNotes()
+        const fetchByView = {
+          Notes: getAllNotes,
+          Archive: getArchivedNotes,
+          Trash: getTrashedNotes,
+        }
+        const response = await fetchByView[activeView]()
         if (!cancelled) setNotes(Array.isArray(response.data) ? response.data : [])
       } catch (requestError) {
         if (!cancelled) setError(getApiErrorDetails(requestError).message)
@@ -45,7 +63,7 @@ function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [retryKey])
+  }, [activeView, retryKey])
 
   useEffect(() => {
     if (!creating) return undefined
@@ -64,11 +82,51 @@ function DashboardPage() {
 
   const refreshNotes = async () => {
     try {
-      const response = await getAllNotes()
+      const fetchByView = {
+        Notes: getAllNotes,
+        Archive: getArchivedNotes,
+        Trash: getTrashedNotes,
+      }
+      const response = await fetchByView[activeView]()
       setNotes(Array.isArray(response.data) ? response.data : [])
       setError('')
     } catch (requestError) {
       setError(getApiErrorDetails(requestError).message)
+    }
+  }
+
+  const handleAction = async (note, actionName) => {
+    if (actionName === 'delete' && !window.confirm('Permanently delete this note? This action cannot be undone.')) {
+      return
+    }
+
+    const actions = {
+      pin: pinNote,
+      unpin: unpinNote,
+      archive: archiveNote,
+      unarchive: unarchiveNote,
+      trash: trashNote,
+      restore: restoreNote,
+      delete: deleteNote,
+    }
+
+    try {
+      await actions[actionName](note.id)
+      await refreshNotes()
+      const successMessages = {
+        pin: 'Note pinned',
+        unpin: 'Note unpinned',
+        archive: 'Note archived',
+        unarchive: 'Note unarchived',
+        trash: 'Note moved to trash',
+        restore: 'Note restored',
+        delete: 'Note permanently deleted',
+      }
+      setSuccessMessage(successMessages[actionName])
+    } catch (requestError) {
+      throw new Error(getApiErrorDetails(requestError).message, {
+        cause: requestError,
+      })
     }
   }
 
@@ -92,16 +150,24 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-layout">
-      <Sidebar />
+      <Sidebar activeItem={activeView} onNavigate={setActiveView} />
       <section className="dashboard-content" aria-labelledby="notes-heading">
         <div className="dashboard-heading">
           <div>
-            <h1 id="notes-heading">Your Notes</h1>
-            <p>Keep your thoughts organized in one place.</p>
+            <h1 id="notes-heading">{activeView === 'Notes' ? 'Your Notes' : activeView}</h1>
+            <p>
+              {activeView === 'Notes'
+                ? 'Keep your thoughts organized in one place.'
+                : activeView === 'Archive'
+                  ? 'Notes you have archived.'
+                  : 'Notes you have moved to trash.'}
+            </p>
           </div>
-          <button type="button" className="create-note-button" onClick={() => setCreating(true)}>
-            Create note
-          </button>
+          {activeView === 'Notes' && (
+            <button type="button" className="create-note-button" onClick={() => setCreating(true)}>
+              Create note
+            </button>
+          )}
         </div>
 
         {successMessage && (
@@ -121,13 +187,30 @@ function DashboardPage() {
 
         {!loading && !error && notes.length === 0 && (
           <div className="dashboard-empty">
-            <h2>No notes yet</h2>
-            <p>Your active notes will appear here when you create them.</p>
+            <h2>
+              {activeView === 'Notes'
+                ? 'No notes yet'
+                : activeView === 'Archive'
+                  ? 'No archived notes'
+                  : 'Trash is empty'}
+            </h2>
+            <p>
+              {activeView === 'Notes'
+                ? 'Your active notes will appear here when you create them.'
+                : activeView === 'Archive'
+                  ? 'Archived notes will appear here.'
+                  : 'Notes moved to trash will appear here.'}
+            </p>
           </div>
         )}
 
         {!loading && !error && notes.length > 0 && (
-          <NoteList notes={notes} onOpenNote={setOpenNoteId} />
+          <NoteList
+            notes={notes}
+            onOpenNote={setOpenNoteId}
+            onAction={handleAction}
+            view={activeView}
+          />
         )}
       </section>
 
