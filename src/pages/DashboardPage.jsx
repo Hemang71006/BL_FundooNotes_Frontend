@@ -3,12 +3,14 @@ import NoteList from '../components/NoteList'
 import Sidebar from '../components/Sidebar'
 import NoteEditor from '../components/NoteEditor'
 import NoteModal from '../components/NoteModal'
+import LabelManager from '../components/LabelManager'
 import {
   archiveNote,
   createNote,
   deleteNote,
   getAllNotes,
   getArchivedNotes,
+  getNotesByLabel,
   getTrashedNotes,
   pinNote,
   restoreNote,
@@ -16,7 +18,22 @@ import {
   unarchiveNote,
   unpinNote,
 } from '../services/noteService'
+import {
+  assignLabelToNote,
+  createLabel,
+  deleteLabel,
+  getLabels,
+  removeLabelFromNote,
+  updateLabel,
+} from '../services/labelService'
 import { getApiErrorDetails } from '../utils/apiError'
+
+function fetchNotesForView(view, selectedLabel) {
+  if (view === 'Archive') return getArchivedNotes()
+  if (view === 'Trash') return getTrashedNotes()
+  if (view === 'Label' && selectedLabel) return getNotesByLabel(selectedLabel.id)
+  return getAllNotes()
+}
 
 /*
  * Project: Fundoo Notes Frontend
@@ -35,6 +52,12 @@ function DashboardPage() {
   const [openNoteId, setOpenNoteId] = useState(null)
   const [successMessage, setSuccessMessage] = useState('')
   const [activeView, setActiveView] = useState('Notes')
+  const [selectedLabel, setSelectedLabel] = useState(null)
+  const [labels, setLabels] = useState([])
+  const [labelsLoading, setLabelsLoading] = useState(true)
+  const [labelsError, setLabelsError] = useState('')
+  const [labelsRetryKey, setLabelsRetryKey] = useState(0)
+  const [managingLabels, setManagingLabels] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -44,12 +67,7 @@ function DashboardPage() {
       setError('')
 
       try {
-        const fetchByView = {
-          Notes: getAllNotes,
-          Archive: getArchivedNotes,
-          Trash: getTrashedNotes,
-        }
-        const response = await fetchByView[activeView]()
+        const response = await fetchNotesForView(activeView, selectedLabel)
         if (!cancelled) setNotes(Array.isArray(response.data) ? response.data : [])
       } catch (requestError) {
         if (!cancelled) setError(getApiErrorDetails(requestError).message)
@@ -63,7 +81,31 @@ function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [activeView, retryKey])
+  }, [activeView, retryKey, selectedLabel])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchLabels() {
+      setLabelsLoading(true)
+      setLabelsError('')
+
+      try {
+        const response = await getLabels()
+        if (!cancelled) setLabels(Array.isArray(response.data) ? response.data : [])
+      } catch (requestError) {
+        if (!cancelled) setLabelsError(getApiErrorDetails(requestError).message)
+      } finally {
+        if (!cancelled) setLabelsLoading(false)
+      }
+    }
+
+    fetchLabels()
+
+    return () => {
+      cancelled = true
+    }
+  }, [labelsRetryKey])
 
   useEffect(() => {
     if (!creating) return undefined
@@ -80,18 +122,59 @@ function DashboardPage() {
     setRetryKey((current) => current + 1)
   }
 
+  const refreshLabels = async () => {
+    setLabelsError('')
+    try {
+      const response = await getLabels()
+      const nextLabels = Array.isArray(response.data) ? response.data : []
+      setLabels(nextLabels)
+      if (selectedLabel) {
+        const refreshedLabel = nextLabels.find((label) => label.id === selectedLabel.id)
+        if (refreshedLabel) {
+          setSelectedLabel(refreshedLabel)
+        } else {
+          setSelectedLabel(null)
+          setActiveView((view) => view === 'Label' ? 'Notes' : view)
+        }
+      }
+    } catch (requestError) {
+      setLabelsError(getApiErrorDetails(requestError).message)
+    }
+  }
+
   const refreshNotes = async () => {
     try {
-      const fetchByView = {
-        Notes: getAllNotes,
-        Archive: getArchivedNotes,
-        Trash: getTrashedNotes,
-      }
-      const response = await fetchByView[activeView]()
+      const response = await fetchNotesForView(activeView, selectedLabel)
       setNotes(Array.isArray(response.data) ? response.data : [])
       setError('')
     } catch (requestError) {
       setError(getApiErrorDetails(requestError).message)
+    }
+  }
+
+  const handleLabelMutation = async (mutation, ...args) => {
+    try {
+      await mutation(...args)
+      await refreshLabels()
+    } catch (requestError) {
+      throw new Error(getApiErrorDetails(requestError).message, {
+        cause: requestError,
+      })
+    }
+  }
+
+  const handleNoteLabelAction = async (noteId, labelId, action) => {
+    try {
+      if (action === 'assign') {
+        await assignLabelToNote(noteId, labelId)
+      } else {
+        await removeLabelFromNote(noteId, labelId)
+      }
+      await refreshNotes()
+    } catch (requestError) {
+      throw new Error(getApiErrorDetails(requestError).message, {
+        cause: requestError,
+      })
     }
   }
 
@@ -150,17 +233,37 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-layout">
-      <Sidebar activeItem={activeView} onNavigate={setActiveView} />
+      <Sidebar
+        activeItem={activeView}
+        selectedLabelId={selectedLabel?.id}
+        labels={labels}
+        labelsLoading={labelsLoading}
+        labelsError={labelsError}
+        onNavigate={(view) => {
+          setSelectedLabel(null)
+          setActiveView(view)
+        }}
+        onSelectLabel={(label) => {
+          setSelectedLabel(label)
+          setActiveView('Label')
+        }}
+        onManageLabels={() => setManagingLabels(true)}
+        onRetryLabels={() => setLabelsRetryKey((current) => current + 1)}
+      />
       <section className="dashboard-content" aria-labelledby="notes-heading">
         <div className="dashboard-heading">
           <div>
-            <h1 id="notes-heading">{activeView === 'Notes' ? 'Your Notes' : activeView}</h1>
+            <h1 id="notes-heading">
+              {activeView === 'Notes' ? 'Your Notes' : activeView === 'Label' ? selectedLabel?.name : activeView}
+            </h1>
             <p>
               {activeView === 'Notes'
                 ? 'Keep your thoughts organized in one place.'
                 : activeView === 'Archive'
                   ? 'Notes you have archived.'
-                  : 'Notes you have moved to trash.'}
+                  : activeView === 'Trash'
+                    ? 'Notes you have moved to trash.'
+                    : `Notes with the ${selectedLabel?.name || 'selected'} label.`}
             </p>
           </div>
           {activeView === 'Notes' && (
@@ -192,14 +295,18 @@ function DashboardPage() {
                 ? 'No notes yet'
                 : activeView === 'Archive'
                   ? 'No archived notes'
-                  : 'Trash is empty'}
+                  : activeView === 'Trash'
+                    ? 'Trash is empty'
+                    : 'No notes with this label'}
             </h2>
             <p>
               {activeView === 'Notes'
                 ? 'Your active notes will appear here when you create them.'
                 : activeView === 'Archive'
                   ? 'Archived notes will appear here.'
-                  : 'Notes moved to trash will appear here.'}
+                  : activeView === 'Trash'
+                    ? 'Notes moved to trash will appear here.'
+                    : 'Notes assigned this label will appear here.'}
             </p>
           </div>
         )}
@@ -227,8 +334,25 @@ function DashboardPage() {
       {openNoteId !== null && (
         <NoteModal
           noteId={openNoteId}
+          labels={labels}
+          labelsLoading={labelsLoading}
+          labelsError={labelsError}
+          onRetryLabels={() => setLabelsRetryKey((current) => current + 1)}
+          onLabelAction={handleNoteLabelAction}
           onClose={() => setOpenNoteId(null)}
           onUpdated={handleUpdated}
+        />
+      )}
+      {managingLabels && (
+        <LabelManager
+          labels={labels}
+          loading={labelsLoading}
+          error={labelsError}
+          onRetry={() => setLabelsRetryKey((current) => current + 1)}
+          onCreate={(labelData) => handleLabelMutation(createLabel, labelData)}
+          onUpdate={(labelId, labelData) => handleLabelMutation(updateLabel, labelId, labelData)}
+          onDelete={(labelId) => handleLabelMutation(deleteLabel, labelId)}
+          onClose={() => setManagingLabels(false)}
         />
       )}
     </div>

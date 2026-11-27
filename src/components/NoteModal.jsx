@@ -11,11 +11,24 @@ import { getNoteById, updateNote } from '../services/noteService'
  * Description: Displays fetched note details and switches to the edit interface.
  */
 
-function NoteModal({ noteId, onClose, onUpdated }) {
+function NoteModal({
+  noteId,
+  onClose,
+  onUpdated,
+  labels = [],
+  labelsLoading = false,
+  labelsError = '',
+  onRetryLabels,
+  onLabelAction,
+}) {
   const [note, setNote] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
+  const [selectedLabelId, setSelectedLabelId] = useState('')
+  const [labelAction, setLabelAction] = useState('')
+  const [labelMessage, setLabelMessage] = useState('')
+  const [labelError, setLabelError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -63,6 +76,24 @@ function NoteModal({ noteId, onClose, onUpdated }) {
     }
   }
 
+  const handleLabelAction = async (action) => {
+    if (!selectedLabelId || labelAction) return
+
+    setLabelAction(action)
+    setLabelMessage('')
+    setLabelError('')
+    try {
+      await onLabelAction(noteId, Number(selectedLabelId), action)
+      setLabelMessage(action === 'assign'
+        ? 'Label assignment request completed.'
+        : 'Label removal request completed.')
+    } catch (requestError) {
+      setLabelError(requestError.message || 'Unable to update the note label.')
+    } finally {
+      setLabelAction('')
+    }
+  }
+
   return (
     <div className="note-modal-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose()
@@ -85,6 +116,56 @@ function NoteModal({ noteId, onClose, onUpdated }) {
                 <p className="note-modal-description">
                   {note?.description?.trim() || 'No description'}
                 </p>
+                {!note?.trashed && (
+                  <section className="note-label-controls" aria-labelledby="note-label-heading">
+                    <h3 id="note-label-heading">Labels</h3>
+                    <p className="note-label-limitation">
+                      This API does not return the labels already assigned to a note. Choose a label to send an add or remove request; assignment status cannot be displayed here.
+                    </p>
+                    {labelsLoading ? (
+                      <p className="note-modal-status" role="status">Loading available labels...</p>
+                    ) : labelsError ? (
+                      <div className="note-modal-error" role="alert">
+                        <p>{labelsError}</p>
+                        <button type="button" onClick={onRetryLabels}>Retry labels</button>
+                      </div>
+                    ) : labels.length === 0 ? (
+                      <p className="note-modal-status">Create a label before assigning one to this note.</p>
+                    ) : (
+                      <>
+                        <label htmlFor="note-label-select">Choose a label</label>
+                        <select
+                          id="note-label-select"
+                          value={selectedLabelId}
+                          onChange={(event) => setSelectedLabelId(event.target.value)}
+                        >
+                          <option value="">Select a label</option>
+                          {labels.map((label) => (
+                            <option key={label.id} value={label.id}>{label.name}</option>
+                          ))}
+                        </select>
+                        <div className="note-modal-actions">
+                          <button
+                            type="button"
+                            onClick={() => handleLabelAction('assign')}
+                            disabled={!selectedLabelId || Boolean(labelAction)}
+                          >
+                            {labelAction === 'assign' ? 'Adding...' : 'Assign label'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLabelAction('remove')}
+                            disabled={!selectedLabelId || Boolean(labelAction)}
+                          >
+                            {labelAction === 'remove' ? 'Removing...' : 'Remove label'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                    {labelMessage && <p className="label-success" role="status">{labelMessage}</p>}
+                    {labelError && <p className="label-error" role="alert">{labelError}</p>}
+                  </section>
+                )}
                 <div className="note-modal-actions">
                   <button type="button" onClick={() => setEditing(true)}>Edit</button>
                 </div>
