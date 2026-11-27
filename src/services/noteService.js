@@ -23,3 +23,39 @@ export function getNoteById(noteId) {
 export function updateNote(noteId, noteData) {
   return apiClient.put(`/notes/${noteId}`, noteData)
 }
+
+export function pinNote(noteId) {
+  return apiClient.patch(`/notes/${noteId}/pin`)
+}
+
+export function unpinNote(noteId) {
+  return apiClient.patch(`/notes/${noteId}/unpin`)
+}
+
+export function archiveNote(noteId) {
+  return apiClient.patch(`/notes/${noteId}/archive`)
+}
+
+export function unarchiveNote(noteId) {
+  return apiClient.patch(`/notes/${noteId}/unarchive`)
+}
+
+export function trashNote(noteId) {
+  return apiClient.patch(`/notes/${noteId}/trash`)
+}
+
+export function restoreNote(noteId) {
+  return apiClient.patch(`/notes/${noteId}/restore`)
+}
+
+export function deleteNote(noteId) {
+  return apiClient.delete(`/notes/${noteId}`)
+}
+
+export function getArchivedNotes() {
+  return apiClient.get('/notes/archived')
+}
+
+export function getTrashedNotes() {
+  return apiClient.get('/notes/trash')
+}
