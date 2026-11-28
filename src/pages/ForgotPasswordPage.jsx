@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import AuthInput from '../components/auth/AuthInput'
 import AuthLayout from '../components/auth/AuthLayout'
-import { getApiErrorDetails } from '../utils/apiError'
+import { getApiErrorDetails, getSuccessMessage } from '../utils/apiError'
 import { requestPasswordReset } from '../services/authService'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import { validateEmail } from '../utils/validators'
 
 /*
@@ -10,13 +11,14 @@ import { validateEmail } from '../utils/validators'
  * Module: Forgot Password Page
  * Author: Hemang
  * Date: 24-11-2026
- * Description: Provides validated forgot-password email form UI without API integration.
+ * Description: Provides validated forgot-password email form UI integrated with the reset API.
  */
 
 function ForgotPasswordPage({ onNavigate }) {
+  const guard = useSubmitGuard()
   const [email, setEmail] = useState('')
-  const [error, setError] = useState('')
-  const [submitted, setSubmitted] = useState(false)
+  const [emailError, setEmailError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [apiError, setApiError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -24,26 +26,33 @@ function ForgotPasswordPage({ onNavigate }) {
     event.preventDefault()
     const nextError = validateEmail(email)
 
-    setError(nextError)
+    setEmailError(nextError)
     setApiError('')
+    setSuccessMessage('')
 
-    if (nextError) {
-      setSubmitted(false)
-      return
-    }
+    if (nextError) return
+
+    const requestId = guard.begin()
+    if (requestId === null) return
 
     setLoading(true)
 
     try {
       const response = await requestPasswordReset({ email: email.trim() })
-      setSubmitted(true)
-      setApiError(response.data)
+
+      if (!guard.isCurrent(requestId)) return
+      setSuccessMessage(getSuccessMessage(
+        response,
+        'If the email is registered, a password reset OTP has been sent.',
+      ))
     } catch (requestError) {
+      if (!guard.isCurrent(requestId)) return
       const details = getApiErrorDetails(requestError)
-      setSubmitted(false)
       setApiError(details.message)
+      setEmailError(details.validationErrors?.email || '')
     } finally {
-      setLoading(false)
+      if (guard.isCurrent(requestId)) setLoading(false)
+      guard.end(requestId)
     }
   }
 
@@ -61,22 +70,21 @@ function ForgotPasswordPage({ onNavigate }) {
           value={email}
           onChange={(value) => {
             setEmail(value)
-            setSubmitted(false)
+            setEmailError('')
             setApiError('')
+            setSuccessMessage('')
           }}
-          error={error}
+          error={emailError}
           placeholder="you@example.com"
           autoComplete="email"
           maxLength={100}
+          disabled={loading}
         />
 
-        {submitted && (
-          <p className="auth-success" role="status">
-            {apiError}
-          </p>
+        {apiError && <p className="auth-error" role="alert">{apiError}</p>}
+        {successMessage && !apiError && (
+          <p className="auth-success" role="status">{successMessage}</p>
         )}
-
-        {!submitted && apiError && <p className="auth-error" role="alert">{apiError}</p>}
 
         <button type="submit" className="auth-primary-button" disabled={loading}>
           {loading ? 'Sending...' : 'Continue'}
@@ -85,11 +93,15 @@ function ForgotPasswordPage({ onNavigate }) {
 
       <p className="auth-link-copy">
         Remembered your password?{' '}
-        <button type="button" onClick={() => onNavigate('login')}>Log in</button>
+        <button type="button" onClick={() => onNavigate('login')} disabled={loading}>
+          Log in
+        </button>
       </p>
       <p className="auth-link-copy">
         Already received an OTP?{' '}
-        <button type="button" onClick={() => onNavigate('reset-password')}>Reset password</button>
+        <button type="button" onClick={() => onNavigate('reset-password')} disabled={loading}>
+          Reset password
+        </button>
       </p>
     </AuthLayout>
   )

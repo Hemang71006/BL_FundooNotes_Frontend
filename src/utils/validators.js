@@ -6,7 +6,7 @@
  * Description: Provides reusable frontend validation matching authentication DTO rules.
  */
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function validateEmail(email, maxLength) {
   if (!email.trim()) return 'Email is required'
@@ -33,7 +33,9 @@ export function validatePassword(password) {
 
 export function validateResetPassword(password) {
   if (!password) return 'New password is required'
-  if (password.length < 8) return 'Password must contain at least 8 characters'
+  if (password.length < 8 || password.length > 100) {
+    return 'Password must be between 8 and 100 characters'
+  }
   return ''
 }
 

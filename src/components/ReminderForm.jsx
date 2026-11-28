@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import { getApiErrorDetails } from '../utils/apiError'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import {
   formatReminderParts,
   getKolkataNowValue,
@@ -14,42 +15,67 @@ import {
  * Description: Collects a future Asia/Kolkata date and time for reminder creation or update.
  */
 
-function ReminderForm({ reminder, onSave, onCancel }) {
+function ReminderForm({ reminder, onSave, onCancel, onBusyChange }) {
+  const guard = useSubmitGuard()
+  const fieldPrefix = useId()
   const initialParts = reminder
     ? formatReminderParts(reminder.reminderAt)
     : { date: '', time: '' }
   const [date, setDate] = useState(initialParts.date === 'Unknown date' ? '' : initialParts.date)
   const [time, setTime] = useState(initialParts.time === 'Unknown time' ? '' : initialParts.time)
-  const [validationError, setValidationError] = useState('')
+  const [savedValueInvalid, setSavedValueInvalid] = useState(
+    Boolean(reminder && (initialParts.date === 'Unknown date' || initialParts.time === 'Unknown time')),
+  )
+  const [fieldErrors, setFieldErrors] = useState({ date: '', time: '' })
   const [apiError, setApiError] = useState('')
   const [saving, setSaving] = useState(false)
-  const fieldPrefix = useId()
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    setValidationError('')
+    setFieldErrors({ date: '', time: '' })
     setApiError('')
 
     if (saving) return
 
-    const inputError = validateReminderInput(date, time)
-    if (inputError) {
-      setValidationError(inputError)
+    if (savedValueInvalid) {
+      setFieldErrors({ date: 'Saved reminder time is invalid; choose a new time', time: '' })
       return
     }
 
+    const inputError = validateReminderInput(date, time)
+    if (inputError) {
+      if (inputError.includes('time')) {
+        setFieldErrors({ date: '', time: inputError })
+      } else {
+        setFieldErrors({ date: inputError, time: '' })
+      }
+      return
+    }
+
+    const requestId = guard.begin()
+    if (requestId === null) return
+
     setSaving(true)
+    onBusyChange?.(true)
+
     try {
       await onSave(`${date}T${time}:00`)
     } catch (requestError) {
+      if (!guard.isCurrent(requestId)) return
       const details = getApiErrorDetails(requestError)
-      const fieldError = details.validationErrors?.reminderAt
-      setApiError(
-        (Array.isArray(fieldError) ? fieldError.join(' ') : fieldError)
-        || details.message
-      )
+      setApiError(details.message || 'Unable to save the reminder.')
+      if (details.validationErrors?.reminderAt) {
+        setFieldErrors((current) => ({
+          ...current,
+          date: details.validationErrors.reminderAt,
+        }))
+      }
     } finally {
-      setSaving(false)
+      if (guard.isCurrent(requestId)) {
+        setSaving(false)
+        onBusyChange?.(false)
+      }
+      guard.end(requestId)
     }
   }
 
@@ -83,10 +109,21 @@ function ReminderForm({ reminder, onSave, onCancel }) {
                 type="date"
                 value={date}
                 min={getKolkataNowValue().slice(0, 10)}
-                onChange={(event) => setDate(event.target.value)}
+                onChange={(event) => {
+                  setDate(event.target.value)
+                  setSavedValueInvalid(false)
+                  setFieldErrors((current) => ({ ...current, date: '' }))
+                  setApiError('')
+                }}
                 disabled={saving}
-                aria-invalid={Boolean(validationError)}
+                aria-invalid={Boolean(fieldErrors.date)}
+                aria-describedby={fieldErrors.date ? `${fieldPrefix}-date-error` : undefined}
               />
+              {fieldErrors.date && (
+                <span id={`${fieldPrefix}-date-error`} className="reminder-form-error">
+                  {fieldErrors.date}
+                </span>
+              )}
             </div>
             <div className="reminder-form-field">
               <label htmlFor={`${fieldPrefix}-time`}>Time</label>
@@ -94,14 +131,24 @@ function ReminderForm({ reminder, onSave, onCancel }) {
                 id={`${fieldPrefix}-time`}
                 type="time"
                 value={time}
-                onChange={(event) => setTime(event.target.value)}
+                onChange={(event) => {
+                  setTime(event.target.value)
+                  setSavedValueInvalid(false)
+                  setFieldErrors((current) => ({ ...current, time: '' }))
+                  setApiError('')
+                }}
                 disabled={saving}
-                aria-invalid={Boolean(validationError)}
+                aria-invalid={Boolean(fieldErrors.time)}
+                aria-describedby={fieldErrors.time ? `${fieldPrefix}-time-error` : undefined}
               />
+              {fieldErrors.time && (
+                <span id={`${fieldPrefix}-time-error`} className="reminder-form-error">
+                  {fieldErrors.time}
+                </span>
+              )}
             </div>
           </div>
 
-          {validationError && <p className="reminder-form-error" role="alert">{validationError}</p>}
           {apiError && <p className="reminder-form-error" role="alert">{apiError}</p>}
 
           <div className="note-editor-actions">

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 
 /*
  * Project: Fundoo Notes Frontend
@@ -9,6 +10,7 @@ import { useState } from 'react'
  */
 
 function NoteCard({ note, onOpen, onAction, view = 'Notes' }) {
+  const guard = useSubmitGuard()
   const [pendingAction, setPendingAction] = useState('')
   const [actionError, setActionError] = useState('')
   const title = note.title?.trim() || 'Untitled note'
@@ -18,24 +20,32 @@ function NoteCard({ note, onOpen, onAction, view = 'Notes' }) {
 
   const handleAction = async (event, actionName) => {
     event.stopPropagation()
+    if (pendingAction) return
+
+    const requestId = guard.begin()
+    if (requestId === null) return
+
     setPendingAction(actionName)
     setActionError('')
 
     try {
       await onAction(note, actionName)
     } catch (error) {
+      if (!guard.isCurrent(requestId)) return
       setActionError(error.message || 'Unable to update this note.')
     } finally {
-      setPendingAction('')
+      if (guard.isCurrent(requestId)) setPendingAction('')
+      guard.end(requestId)
     }
   }
 
   return (
-    <article className={`note-card ${note.pinned ? 'pinned' : ''}`}>
+    <article className={`note-card ${note.pinned ? 'pinned' : ''}`} aria-busy={Boolean(pendingAction)}>
       <button
         type="button"
         className="note-card-content"
         onClick={() => onOpen?.(note.id)}
+        disabled={Boolean(pendingAction)}
         aria-label={`Open note ${title}`}
       >
         <span className="note-card-header">

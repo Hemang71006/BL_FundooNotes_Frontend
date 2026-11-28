@@ -2,8 +2,9 @@ import { useState } from 'react'
 import AuthInput from '../components/auth/AuthInput'
 import PasswordInput from '../components/auth/PasswordInput'
 import AuthLayout from '../components/auth/AuthLayout'
-import { getApiErrorDetails } from '../utils/apiError'
+import { getApiErrorDetails, getSuccessMessage } from '../utils/apiError'
 import { registerUser } from '../services/authService'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import {
   validateConfirmPassword,
   validateEmail,
@@ -16,10 +17,11 @@ import {
  * Module: Registration Page
  * Author: Hemang
  * Date: 24-11-2026
- * Description: Provides validated registration form UI without backend integration.
+ * Description: Provides validated registration form UI integrated with the backend registration API.
  */
 
 function RegisterPage({ onNavigate }) {
+  const guard = useSubmitGuard()
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -28,13 +30,14 @@ function RegisterPage({ onNavigate }) {
     confirmPassword: '',
   })
   const [errors, setErrors] = useState({})
-  const [submitted, setSubmitted] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
   const [apiError, setApiError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
-    setSubmitted(false)
+    setErrors((current) => ({ ...current, [field]: '' }))
+    setSuccessMessage('')
     setApiError('')
   }
 
@@ -51,22 +54,32 @@ function RegisterPage({ onNavigate }) {
 
     setErrors(nextErrors)
     setApiError('')
+    setSuccessMessage('')
 
     if (!Object.values(nextErrors).every((error) => !error)) {
       return
     }
 
+    const requestId = guard.begin()
+    if (requestId === null) return
+
     setLoading(true)
 
     try {
-      await registerUser({
+      const response = await registerUser({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         email: form.email.trim(),
         password: form.password,
       })
-      setSubmitted(true)
+
+      if (!guard.isCurrent(requestId)) return
+      setSuccessMessage(getSuccessMessage(
+        response,
+        'Account created successfully. You can now log in.',
+      ))
     } catch (error) {
+      if (!guard.isCurrent(requestId)) return
       const details = getApiErrorDetails(error)
       setApiError(details.message)
       setErrors((current) => ({
@@ -74,7 +87,8 @@ function RegisterPage({ onNavigate }) {
         ...details.validationErrors,
       }))
     } finally {
-      setLoading(false)
+      if (guard.isCurrent(requestId)) setLoading(false)
+      guard.end(requestId)
     }
   }
 
@@ -95,6 +109,7 @@ function RegisterPage({ onNavigate }) {
             placeholder="First name"
             autoComplete="given-name"
             maxLength={50}
+            disabled={loading}
           />
           <AuthInput
             id="lastName"
@@ -105,6 +120,7 @@ function RegisterPage({ onNavigate }) {
             placeholder="Last name"
             autoComplete="family-name"
             maxLength={50}
+            disabled={loading}
           />
         </div>
 
@@ -118,6 +134,7 @@ function RegisterPage({ onNavigate }) {
           placeholder="you@example.com"
           autoComplete="email"
           maxLength={100}
+          disabled={loading}
         />
 
         <PasswordInput
@@ -129,6 +146,7 @@ function RegisterPage({ onNavigate }) {
           placeholder="8 to 100 characters"
           autoComplete="new-password"
           maxLength={100}
+          disabled={loading}
         />
 
         <PasswordInput
@@ -140,15 +158,13 @@ function RegisterPage({ onNavigate }) {
           placeholder="Re-enter password"
           autoComplete="new-password"
           maxLength={100}
+          disabled={loading}
         />
 
-        {submitted && (
-          <p className="auth-success" role="status">
-            Account created successfully. You can now log in.
-          </p>
-        )}
-
         {apiError && <p className="auth-error" role="alert">{apiError}</p>}
+        {successMessage && !apiError && (
+          <p className="auth-success" role="status">{successMessage}</p>
+        )}
 
         <button type="submit" className="auth-primary-button" disabled={loading}>
           {loading ? 'Creating account...' : 'Create account'}
@@ -157,7 +173,9 @@ function RegisterPage({ onNavigate }) {
 
       <p className="auth-link-copy">
         Already have an account?{' '}
-        <button type="button" onClick={() => onNavigate('login')}>Log in</button>
+        <button type="button" onClick={() => onNavigate('login')} disabled={loading}>
+          Log in
+        </button>
       </p>
     </AuthLayout>
   )

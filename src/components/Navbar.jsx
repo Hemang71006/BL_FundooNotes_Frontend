@@ -1,5 +1,6 @@
-
+import { useState } from 'react'
 import SearchBar from './SearchBar'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 
 /*
  * Project: Fundoo Notes Frontend
@@ -10,6 +11,23 @@ import SearchBar from './SearchBar'
  */
 
 function Navbar({ authActions, searchQuery = '', onSearchChange, onClearSearch }) {
+  const guard = useSubmitGuard()
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    if (loggingOut) return
+    const requestId = guard.begin()
+    if (requestId === null) return
+
+    setLoggingOut(true)
+    try {
+      await authActions.onLogout()
+    } finally {
+      if (guard.isCurrent(requestId)) setLoggingOut(false)
+      guard.end(requestId)
+    }
+  }
+
   return (
     <header className="navbar">
       <div className="navbar-brand">
@@ -24,8 +42,14 @@ function Navbar({ authActions, searchQuery = '', onSearchChange, onClearSearch }
       />
       {authActions?.onLogout ? (
         <div className="navbar-auth-actions">
-          <button type="button" className="navbar-register" onClick={authActions.onLogout}>
-            Log out
+          <button
+            type="button"
+            className="navbar-register"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            aria-busy={loggingOut}
+          >
+            {loggingOut ? 'Logging out...' : 'Log out'}
           </button>
         </div>
       ) : authActions ? (

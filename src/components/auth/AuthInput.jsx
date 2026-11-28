@@ -17,6 +17,7 @@ function AuthInput({
   autoComplete,
   maxLength,
   inputMode,
+  disabled = false,
 }) {
   return (
     <div className="auth-field">
@@ -31,6 +32,7 @@ function AuthInput({
         autoComplete={autoComplete}
         maxLength={maxLength}
         inputMode={inputMode}
+        disabled={disabled}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? `${id}-error` : undefined}
       />

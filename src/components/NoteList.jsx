@@ -10,10 +10,6 @@ import NoteCard from './NoteCard'
  */
 
 function NoteList({ notes, onOpenNote, onAction, view = 'Notes' }) {
-  if (notes.length === 0) {
-    return <p className="empty-message">No notes found.</p>
-  }
-
   return (
     <div className="notes-grid">
       {notes.map((note) => (

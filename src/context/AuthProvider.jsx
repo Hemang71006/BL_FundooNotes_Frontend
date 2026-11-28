@@ -21,6 +21,8 @@ import { AuthContext } from './authContext'
  * Description: Centralizes authentication state, session restoration, login and logout behavior.
  */
 
+const SESSION_EXPIRED_MESSAGE = 'Your session has expired. Please log in again.'
+
 function getInitialAuthState() {
   const restoredSession = getAuthSession()
   return {
@@ -33,11 +35,13 @@ function AuthProvider({ children }) {
   const [initialState] = useState(getInitialAuthState)
   const [session, setSession] = useState(initialState.session)
   const [status, setStatus] = useState(initialState.status)
+  const [authNotice, setAuthNotice] = useState('')
 
   const handleUnauthorized = useCallback(() => {
     clearAuthSession()
     setSession(null)
     setStatus('unauthenticated')
+    setAuthNotice(SESSION_EXPIRED_MESSAGE)
   }, [])
 
   useEffect(() => {
@@ -46,6 +50,7 @@ function AuthProvider({ children }) {
   }, [handleUnauthorized])
 
   const login = useCallback(async (credentials) => {
+    setAuthNotice('')
     const response = await loginUser(credentials)
     const nextSession = saveAuthSession(response.data)
     setSession(nextSession)
@@ -67,6 +72,7 @@ function AuthProvider({ children }) {
       clearAuthSession()
       setSession(null)
       setStatus('unauthenticated')
+      setAuthNotice('')
     }
 
     return remoteLogoutSucceeded
@@ -76,11 +82,12 @@ function AuthProvider({ children }) {
     user: session?.user || null,
     token: session?.token || null,
     status,
+    authNotice,
     isAuthenticated: status === 'authenticated',
     isRestoring: status === 'restoring',
     login,
     logout,
-  }), [login, logout, session, status])
+  }), [authNotice, login, logout, session, status])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
