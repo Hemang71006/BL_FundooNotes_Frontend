@@ -9,10 +9,6 @@ import {
   archiveNote,
   createNote,
   deleteNote,
-  getAllNotes,
-  getArchivedNotes,
-  getNotesByLabel,
-  getTrashedNotes,
   pinNote,
   restoreNote,
   searchNotes,
@@ -31,17 +27,15 @@ import {
 import { getApiErrorDetails } from '../utils/apiError'
 
 function fetchNotesForView(view, selectedLabel, keyword = '') {
-  const status = view === 'Archive'
-    ? 'ARCHIVED'
-    : view === 'Trash'
-      ? 'TRASHED'
-      : 'ACTIVE'
+  const status = view === 'Pinned'
+    ? 'PINNED'
+    : view === 'Archive'
+      ? 'ARCHIVED'
+      : view === 'Trash'
+        ? 'TRASHED'
+        : 'ACTIVE'
 
-  if (keyword) return searchNotes(keyword, status, selectedLabel?.id)
-  if (view === 'Archive') return getArchivedNotes()
-  if (view === 'Trash') return getTrashedNotes()
-  if (view === 'Label' && selectedLabel) return getNotesByLabel(selectedLabel.id)
-  return getAllNotes()
+  return searchNotes(keyword, status, selectedLabel?.id)
 }
 
 /*
@@ -52,7 +46,7 @@ function fetchNotesForView(view, selectedLabel, keyword = '') {
  * Description: Fetches and displays the authenticated user's active notes.
  */
 
-function DashboardPage({ searchQuery = '' }) {
+function DashboardPage({ searchQuery = '', onClearSearch }) {
   const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -70,11 +64,24 @@ function DashboardPage({ searchQuery = '' }) {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [remindersRefreshKey, setRemindersRefreshKey] = useState(0)
   const notesRequestRef = useRef(0)
+  const labelsRequestRef = useRef(0)
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), searchQuery ? 300 : 0)
     return () => clearTimeout(timer)
   }, [searchQuery])
+
+  const clearSearchState = () => {
+    onClearSearch?.()
+    setDebouncedSearch('')
+    setSuccessMessage('')
+  }
+
+  const clearFilters = () => {
+    clearSearchState()
+    setSelectedLabel(null)
+    setActiveView('Notes')
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -107,6 +114,7 @@ function DashboardPage({ searchQuery = '' }) {
 
   useEffect(() => {
     let cancelled = false
+    const requestVersion = ++labelsRequestRef.current
 
     async function fetchLabels() {
       setLabelsLoading(true)
@@ -114,11 +122,15 @@ function DashboardPage({ searchQuery = '' }) {
 
       try {
         const response = await getLabels()
-        if (!cancelled) setLabels(Array.isArray(response.data) ? response.data : [])
+        if (!cancelled && requestVersion === labelsRequestRef.current) {
+          setLabels(Array.isArray(response.data) ? response.data : [])
+        }
       } catch (requestError) {
-        if (!cancelled) setLabelsError(getApiErrorDetails(requestError).message)
+        if (!cancelled && requestVersion === labelsRequestRef.current) {
+          setLabelsError(getApiErrorDetails(requestError).message)
+        }
       } finally {
-        if (!cancelled) setLabelsLoading(false)
+        if (!cancelled && requestVersion === labelsRequestRef.current) setLabelsLoading(false)
       }
     }
 
@@ -145,26 +157,35 @@ function DashboardPage({ searchQuery = '' }) {
   }
 
   const refreshLabels = async () => {
+    const requestVersion = ++labelsRequestRef.current
     setLabelsError('')
+
     try {
       const response = await getLabels()
+      if (requestVersion !== labelsRequestRef.current) return
+
       const nextLabels = Array.isArray(response.data) ? response.data : []
       setLabels(nextLabels)
       if (selectedLabel) {
         const refreshedLabel = nextLabels.find((label) => label.id === selectedLabel.id)
         if (refreshedLabel) {
-          setSelectedLabel(refreshedLabel)
+          if (refreshedLabel.name !== selectedLabel.name) setSelectedLabel(refreshedLabel)
         } else {
           setSelectedLabel(null)
           setActiveView((view) => view === 'Label' ? 'Notes' : view)
         }
       }
     } catch (requestError) {
-      setLabelsError(getApiErrorDetails(requestError).message)
+      if (requestVersion === labelsRequestRef.current) {
+        setLabelsError(getApiErrorDetails(requestError).message)
+      }
+    } finally {
+      if (requestVersion === labelsRequestRef.current) setLabelsLoading(false)
     }
   }
 
   const refreshNotes = async () => {
+    if (activeView === 'Reminders') return
     const requestVersion = ++notesRequestRef.current
     setLoading(true)
     setError('')
@@ -262,6 +283,37 @@ function DashboardPage({ searchQuery = '' }) {
     await refreshNotes()
   }
 
+  const viewName = activeView === 'Label' ? (selectedLabel?.name || 'Label') : activeView
+  const emptyState = debouncedSearch
+    ? {
+      title: 'No matching notes',
+      description: `No notes match "${debouncedSearch}" in ${viewName}.`,
+    }
+    : activeView === 'Notes'
+      ? {
+        title: 'No notes yet',
+        description: 'Your active notes will appear here when you create them.',
+      }
+      : activeView === 'Pinned'
+        ? {
+          title: 'No pinned notes',
+          description: 'Notes you pin will appear here.',
+        }
+        : activeView === 'Archive'
+          ? {
+            title: 'No archived notes',
+            description: 'Archived notes will appear here.',
+          }
+          : activeView === 'Trash'
+            ? {
+              title: 'Trash is empty',
+              description: 'Notes moved to trash will appear here.',
+            }
+            : {
+              title: 'No notes with this label',
+              description: 'Notes assigned this label will appear here.',
+            }
+
   return (
     <div className="dashboard-layout">
       <Sidebar
@@ -271,12 +323,12 @@ function DashboardPage({ searchQuery = '' }) {
         labelsLoading={labelsLoading}
         labelsError={labelsError}
         onNavigate={(view) => {
-          setSuccessMessage('')
+          clearSearchState()
           setSelectedLabel(null)
           setActiveView(view)
         }}
         onSelectLabel={(label) => {
-          setSuccessMessage('')
+          clearSearchState()
           setSelectedLabel(label)
           setActiveView('Label')
         }}
@@ -291,23 +343,29 @@ function DashboardPage({ searchQuery = '' }) {
                 ? 'Reminders'
                 : debouncedSearch
                   ? 'Search results'
-                  : activeView === 'Notes' ? 'Your Notes' : activeView === 'Label' ? selectedLabel?.name : activeView}
+                  : activeView === 'Notes'
+                    ? 'Your Notes'
+                    : activeView === 'Pinned'
+                      ? 'Pinned notes'
+                      : activeView === 'Label' ? selectedLabel?.name : activeView}
             </h1>
             <p>
               {activeView === 'Reminders'
                 ? 'Reminders saved for your notes.'
                 : debouncedSearch
-                  ? `Notes matching "${debouncedSearch}".`
+                  ? `Notes matching "${debouncedSearch}" in ${viewName}.`
                   : activeView === 'Notes'
                     ? 'Keep your thoughts organized in one place.'
-                    : activeView === 'Archive'
-                      ? 'Notes you have archived.'
-                      : activeView === 'Trash'
-                        ? 'Notes you have moved to trash.'
-                        : `Notes with the ${selectedLabel?.name || 'selected'} label.`}
+                    : activeView === 'Pinned'
+                      ? 'Important notes you have pinned.'
+                      : activeView === 'Archive'
+                        ? 'Notes you have archived.'
+                        : activeView === 'Trash'
+                          ? 'Notes you have moved to trash.'
+                          : `Notes with the ${selectedLabel?.name || 'selected'} label.`}
             </p>
           </div>
-          {activeView === 'Notes' && !debouncedSearch && (
+          {activeView === 'Notes' && (
             <button type="button" className="create-note-button" onClick={() => setCreating(true)}>
               Create note
             </button>
@@ -316,6 +374,17 @@ function DashboardPage({ searchQuery = '' }) {
 
         {successMessage && (
           <p className="dashboard-success" role="status">{successMessage}</p>
+        )}
+
+        {activeView !== 'Reminders' && (debouncedSearch || selectedLabel || activeView !== 'Notes') && (
+          <div className="filter-summary" aria-label="Active filters">
+            <span className="filter-chip">View: {viewName}</span>
+            {debouncedSearch && <span className="filter-chip">Search: "{debouncedSearch}"</span>}
+            {selectedLabel && <span className="filter-chip">Label: {selectedLabel.name}</span>}
+            <button type="button" className="clear-filters-button" onClick={clearFilters}>
+              Clear filters
+            </button>
+          </div>
         )}
 
         {activeView !== 'Reminders' && loading && (
@@ -331,24 +400,8 @@ function DashboardPage({ searchQuery = '' }) {
 
         {activeView !== 'Reminders' && !loading && !error && notes.length === 0 && (
           <div className="dashboard-empty">
-            <h2>
-              {activeView === 'Notes'
-                ? 'No notes yet'
-                : activeView === 'Archive'
-                  ? 'No archived notes'
-                  : activeView === 'Trash'
-                    ? 'Trash is empty'
-                    : 'No notes with this label'}
-            </h2>
-            <p>
-              {activeView === 'Notes'
-                ? 'Your active notes will appear here when you create them.'
-                : activeView === 'Archive'
-                  ? 'Archived notes will appear here.'
-                  : activeView === 'Trash'
-                    ? 'Notes moved to trash will appear here.'
-                    : 'Notes assigned this label will appear here.'}
-            </p>
+            <h2>{emptyState.title}</h2>
+            <p>{emptyState.description}</p>
           </div>
         )}
 

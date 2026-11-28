@@ -17,7 +17,7 @@ function Sidebar({
   onManageLabels,
   onRetryLabels,
 }) {
-  const items = ['Notes', 'Reminders', 'Archive', 'Trash']
+  const items = ['Notes', 'Pinned', 'Reminders', 'Archive', 'Trash']
 
   return (
     <aside className="dashboard-sidebar" aria-label="Dashboard navigation">
@@ -27,12 +27,14 @@ function Sidebar({
             key={item}
             type="button"
             className={item === activeItem && !selectedLabelId ? 'sidebar-item active' : 'sidebar-item'}
-            aria-current={item === activeItem ? 'page' : undefined}
+            aria-current={item === activeItem && !selectedLabelId ? 'page' : undefined}
             onClick={() => {
               onNavigate?.(item)
             }}
           >
-            <span aria-hidden="true">{item === 'Notes' ? '▣' : item === 'Reminders' ? '◷' : '○'}</span>
+            <span aria-hidden="true">
+              {item === 'Notes' ? '▣' : item === 'Pinned' ? '★' : item === 'Reminders' ? '◷' : '○'}
+            </span>
             {item}
           </button>
         ))}
