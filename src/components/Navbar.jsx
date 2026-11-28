@@ -1,4 +1,6 @@
 
+import SearchBar from './SearchBar'
+
 /*
  * Project: Fundoo Notes Frontend
  * Module: Navbar
@@ -7,22 +9,19 @@
  * Description: Displays the application navigation header.
  */
 
-function Navbar({ authActions, searchQuery = '', onSearchChange }) {
+function Navbar({ authActions, searchQuery = '', onSearchChange, onClearSearch }) {
   return (
     <header className="navbar">
       <div className="navbar-brand">
         <span className="navbar-logo">F</span>
         <h2>Fundoo Notes</h2>
       </div>
-      <div className="navbar-search">
-        <input
-          type="search"
-          placeholder="Search notes..."
-          aria-label="Search notes"
-          value={searchQuery}
-          onChange={(event) => onSearchChange?.(event.target.value)}
-        />
-      </div>
+      <SearchBar
+        className="navbar-search"
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
+        onClear={onClearSearch}
+      />
       {authActions?.onLogout ? (
         <div className="navbar-auth-actions">
           <button type="button" className="navbar-register" onClick={authActions.onLogout}>

@@ -33,6 +33,11 @@ function App() {
     setAuthView('login')
   }
 
+  const handleUnauthenticated = () => {
+    setSearchQuery('')
+    if (!isRestoring) setAuthView('login')
+  }
+
   if (authView === 'login') {
     return <LoginPage onNavigate={setAuthView} />
   }
@@ -50,15 +55,12 @@ function App() {
   }
 
   return (
-    <ProtectedRoute
-      onUnauthenticated={() => {
-        if (!isRestoring) setAuthView('login')
-      }}
-    >
+    <ProtectedRoute onUnauthenticated={handleUnauthenticated}>
       <div className="app-container">
         <Navbar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          onClearSearch={() => setSearchQuery('')}
           authActions={isAuthenticated ? {
             onLogout: handleLogout,
           } : {
@@ -66,7 +68,7 @@ function App() {
             onRegister: () => setAuthView('register'),
           }}
         />
-        <DashboardPage searchQuery={searchQuery} />
+        <DashboardPage searchQuery={searchQuery} onClearSearch={() => setSearchQuery('')} />
       </div>
     </ProtectedRoute>
   )
