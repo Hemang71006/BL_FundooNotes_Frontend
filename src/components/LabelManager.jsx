@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { getApiErrorDetails } from '../utils/apiError'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 
 /*
  * Project: Fundoo Notes Frontend
@@ -12,17 +14,21 @@ const LABEL_NAME_LIMIT = 50
 const LABEL_COLOR_LIMIT = 7
 
 function LabelManager({ labels, loading, error, onRetry, onCreate, onUpdate, onDelete, onClose }) {
+  const guard = useSubmitGuard()
   const [editingLabel, setEditingLabel] = useState(null)
   const [name, setName] = useState('')
   const [color, setColor] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({ name: '', color: '' })
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
   const [pending, setPending] = useState(false)
+  const [deletingLabelId, setDeletingLabelId] = useState(null)
 
   const resetForm = () => {
     setEditingLabel(null)
     setName('')
     setColor('')
+    setFieldErrors({ name: '', color: '' })
     setFormError('')
     setFormSuccess('')
   }
@@ -31,31 +37,37 @@ function LabelManager({ labels, loading, error, onRetry, onCreate, onUpdate, onD
     setEditingLabel(label)
     setName(label.name)
     setColor(label.color || '')
+    setFieldErrors({ name: '', color: '' })
     setFormError('')
     setFormSuccess('')
   }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    if (pending) return
+
+    const nextErrors = { name: '', color: '' }
+    if (!name.trim()) {
+      nextErrors.name = 'Label name is required.'
+    } else if (name.trim().length > LABEL_NAME_LIMIT) {
+      nextErrors.name = 'Label name cannot exceed 50 characters.'
+    }
+    if (color.length > LABEL_COLOR_LIMIT) {
+      nextErrors.color = 'Label color cannot exceed 7 characters.'
+    }
+
+    setFieldErrors(nextErrors)
     setFormError('')
     setFormSuccess('')
 
-    if (!name.trim()) {
-      setFormError('Label name is required.')
-      return
-    }
+    if (nextErrors.name || nextErrors.color) return
 
-    if (name.trim().length > LABEL_NAME_LIMIT) {
-      setFormError('Label name cannot exceed 50 characters.')
-      return
-    }
+    const requestId = guard.begin()
+    if (requestId === null) return
 
-    if (color.length > LABEL_COLOR_LIMIT) {
-      setFormError('Label color cannot exceed 7 characters.')
-      return
-    }
-
+    const wasEditing = Boolean(editingLabel)
     setPending(true)
+
     try {
       const labelData = {
         name: name.trim(),
@@ -64,35 +76,54 @@ function LabelManager({ labels, loading, error, onRetry, onCreate, onUpdate, onD
 
       if (editingLabel) {
         await onUpdate(editingLabel.id, labelData)
-        setFormSuccess('Label updated.')
       } else {
         await onCreate(labelData)
-        setFormSuccess('Label created.')
       }
 
+      if (!guard.isCurrent(requestId)) return
       resetForm()
-      setFormSuccess(editingLabel ? 'Label updated.' : 'Label created.')
+      setFormSuccess(wasEditing ? 'Label updated.' : 'Label created.')
     } catch (requestError) {
-      setFormError(requestError.message || 'Unable to save the label.')
+      if (!guard.isCurrent(requestId)) return
+      const details = getApiErrorDetails(requestError)
+      setFormError(details.message || 'Unable to save the label.')
+      setFieldErrors({
+        name: details.validationErrors?.name || '',
+        color: details.validationErrors?.color || '',
+      })
     } finally {
-      setPending(false)
+      if (guard.isCurrent(requestId)) setPending(false)
+      guard.end(requestId)
     }
   }
 
   const handleDelete = async (label) => {
+    if (pending) return
     if (!window.confirm(`Delete the label "${label.name}"?`)) return
 
+    const requestId = guard.begin()
+    if (requestId === null) return
+
     setPending(true)
+    setDeletingLabelId(label.id)
+    setFieldErrors({ name: '', color: '' })
     setFormError('')
     setFormSuccess('')
+
     try {
       await onDelete(label.id)
+      if (!guard.isCurrent(requestId)) return
       if (editingLabel?.id === label.id) resetForm()
       setFormSuccess('Label deleted.')
     } catch (requestError) {
-      setFormError(requestError.message || 'Unable to delete the label.')
+      if (!guard.isCurrent(requestId)) return
+      setFormError(getApiErrorDetails(requestError).message || 'Unable to delete the label.')
     } finally {
-      setPending(false)
+      if (guard.isCurrent(requestId)) {
+        setPending(false)
+        setDeletingLabelId(null)
+      }
+      guard.end(requestId)
     }
   }
 
@@ -106,7 +137,13 @@ function LabelManager({ labels, loading, error, onRetry, onCreate, onUpdate, onD
             <h2 id="label-manager-title">Manage labels</h2>
             <p>Create, rename, or remove your labels.</p>
           </div>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close label manager">
+          <button
+            type="button"
+            className="modal-close"
+            onClick={onClose}
+            disabled={pending}
+            aria-label="Close label manager"
+          >
             Close
           </button>
         </div>
@@ -117,11 +154,19 @@ function LabelManager({ labels, loading, error, onRetry, onCreate, onUpdate, onD
             <input
               id="label-name"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value)
+                setFieldErrors((current) => ({ ...current, name: '' }))
+                setFormError('')
+                setFormSuccess('')
+              }}
               maxLength={LABEL_NAME_LIMIT}
               placeholder="For example, Personal"
-              aria-invalid={Boolean(formError)}
+              disabled={pending}
+              aria-invalid={Boolean(fieldErrors.name)}
+              aria-describedby={fieldErrors.name ? 'label-name-error' : undefined}
             />
+            {fieldErrors.name && <span id="label-name-error" className="label-error">{fieldErrors.name}</span>}
             <span className="field-count">{name.length}/{LABEL_NAME_LIMIT}</span>
           </div>
           <div className="label-form-field">
@@ -129,15 +174,25 @@ function LabelManager({ labels, loading, error, onRetry, onCreate, onUpdate, onD
             <input
               id="label-color"
               value={color}
-              onChange={(event) => setColor(event.target.value)}
+              onChange={(event) => {
+                setColor(event.target.value)
+                setFieldErrors((current) => ({ ...current, color: '' }))
+                setFormError('')
+                setFormSuccess('')
+              }}
               maxLength={LABEL_COLOR_LIMIT}
               placeholder="#F4B400"
-              aria-describedby="label-color-help"
+              disabled={pending}
+              aria-invalid={Boolean(fieldErrors.color)}
+              aria-describedby={fieldErrors.color ? 'label-color-error' : 'label-color-help'}
             />
+            {fieldErrors.color && <span id="label-color-error" className="label-error">{fieldErrors.color}</span>}
             <span id="label-color-help" className="label-help">Backend accepts an optional color value up to 7 characters.</span>
           </div>
           {formError && <p className="label-error" role="alert">{formError}</p>}
-          {formSuccess && <p className="label-success" role="status">{formSuccess}</p>}
+          {formSuccess && !formError && !error && (
+            <p className="label-success" role="status">{formSuccess}</p>
+          )}
           <div className="label-form-actions">
             {editingLabel && (
               <button type="button" className="label-secondary-button" onClick={resetForm} disabled={pending}>
@@ -145,7 +200,7 @@ function LabelManager({ labels, loading, error, onRetry, onCreate, onUpdate, onD
               </button>
             )}
             <button type="submit" className="label-primary-button" disabled={pending}>
-              {pending ? 'Saving...' : editingLabel ? 'Save changes' : 'Create label'}
+              {pending && !deletingLabelId ? 'Saving...' : editingLabel ? 'Save changes' : 'Create label'}
             </button>
           </div>
         </form>
@@ -157,23 +212,34 @@ function LabelManager({ labels, loading, error, onRetry, onCreate, onUpdate, onD
         {error && (
           <div className="label-error" role="alert">
             <p>{error}</p>
-            <button type="button" onClick={onRetry}>Retry</button>
+            <button type="button" onClick={onRetry} disabled={loading}>Retry</button>
           </div>
         )}
         {!loading && !error && labels.length === 0 && (
           <p className="label-empty">You have not created any labels yet.</p>
         )}
         {!loading && !error && labels.length > 0 && (
-          <ul className="managed-label-list">
+          <ul className="managed-label-list" aria-busy={pending}>
             {labels.map((label) => (
               <li key={label.id}>
                 <span className="managed-label-name">{label.name}</span>
                 {label.color && <span className="managed-label-color">{label.color}</span>}
-                <button type="button" onClick={() => startEditing(label)} disabled={pending} aria-label={`Edit ${label.name}`}>
+                <button
+                  type="button"
+                  onClick={() => startEditing(label)}
+                  disabled={pending}
+                  aria-label={`Edit ${label.name}`}
+                >
                   Edit
                 </button>
-                <button type="button" className="label-delete-button" onClick={() => handleDelete(label)} disabled={pending} aria-label={`Delete ${label.name}`}>
-                  Delete
+                <button
+                  type="button"
+                  className="label-delete-button"
+                  onClick={() => handleDelete(label)}
+                  disabled={pending}
+                  aria-label={`Delete ${label.name}`}
+                >
+                  {deletingLabelId === label.id ? 'Deleting...' : 'Delete'}
                 </button>
               </li>
             ))}

@@ -59,6 +59,7 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
   const [error, setError] = useState('')
   const [retryKey, setRetryKey] = useState(0)
   const [creating, setCreating] = useState(false)
+  const [savingNote, setSavingNote] = useState(false)
   const [openNoteId, setOpenNoteId] = useState(null)
   const [successMessage, setSuccessMessage] = useState('')
   const [activeView, setActiveView] = useState('Notes')
@@ -82,6 +83,7 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
     onClearSearch?.()
     setDebouncedSearch('')
     setSuccessMessage('')
+    setError('')
   }
 
   const clearFilters = () => {
@@ -100,8 +102,11 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
 
       try {
         const response = await fetchNotesForView(activeView, selectedLabel, debouncedSearch)
+        if (!Array.isArray(response.data)) {
+          throw new Error('The backend returned an unexpected notes response.')
+        }
         if (!cancelled && requestVersion === notesRequestRef.current) {
-          setNotes(Array.isArray(response.data) ? response.data : [])
+          setNotes(response.data)
         }
       } catch (requestError) {
         if (!cancelled && requestVersion === notesRequestRef.current) {
@@ -129,8 +134,11 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
 
       try {
         const response = await getLabels()
+        if (!Array.isArray(response.data)) {
+          throw new Error('The backend returned an unexpected labels response.')
+        }
         if (!cancelled && requestVersion === labelsRequestRef.current) {
-          setLabels(Array.isArray(response.data) ? response.data : [])
+          setLabels(response.data)
         }
       } catch (requestError) {
         if (!cancelled && requestVersion === labelsRequestRef.current) {
@@ -152,26 +160,35 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
     if (!creating) return undefined
 
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') setCreating(false)
+      if (event.key === 'Escape' && !savingNote) setCreating(false)
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [creating])
+  }, [creating, savingNote])
 
   const handleRetry = () => {
-    setRetryKey((current) => current + 1)
+    if (!loading) setRetryKey((current) => current + 1)
+  }
+
+  const handleRetryLabels = () => {
+    if (!labelsLoading) setLabelsRetryKey((current) => current + 1)
   }
 
   const refreshLabels = async () => {
     const requestVersion = ++labelsRequestRef.current
+    setLabelsLoading(true)
     setLabelsError('')
 
     try {
       const response = await getLabels()
-      if (requestVersion !== labelsRequestRef.current) return
+      if (requestVersion !== labelsRequestRef.current) return false
 
-      const nextLabels = Array.isArray(response.data) ? response.data : []
+      if (!Array.isArray(response.data)) {
+        throw new Error('The backend returned an unexpected labels response.')
+      }
+
+      const nextLabels = response.data
       setLabels(nextLabels)
       if (selectedLabel) {
         const refreshedLabel = nextLabels.find((label) => label.id === selectedLabel.id)
@@ -182,30 +199,38 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
           setActiveView((view) => view === 'Label' ? 'Notes' : view)
         }
       }
+      return true
     } catch (requestError) {
       if (requestVersion === labelsRequestRef.current) {
         setLabelsError(getApiErrorDetails(requestError).message)
       }
+      return false
     } finally {
       if (requestVersion === labelsRequestRef.current) setLabelsLoading(false)
     }
   }
 
   const refreshNotes = async () => {
-    if (activeView === 'Reminders') return
+    if (activeView === 'Reminders') return true
     const requestVersion = ++notesRequestRef.current
     setLoading(true)
     setError('')
 
     try {
       const response = await fetchNotesForView(activeView, selectedLabel, debouncedSearch)
-      if (requestVersion === notesRequestRef.current) {
-        setNotes(Array.isArray(response.data) ? response.data : [])
+      if (requestVersion !== notesRequestRef.current) return false
+
+      if (!Array.isArray(response.data)) {
+        throw new Error('The backend returned an unexpected notes response.')
       }
+
+      setNotes(response.data)
+      return true
     } catch (requestError) {
       if (requestVersion === notesRequestRef.current) {
         setError(getApiErrorDetails(requestError).message)
       }
+      return false
     } finally {
       if (requestVersion === notesRequestRef.current) setLoading(false)
     }
@@ -214,7 +239,11 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
   const handleLabelMutation = async (mutation, ...args) => {
     try {
       await mutation(...args)
-      await refreshLabels()
+      const refreshed = await refreshLabels()
+      if (!refreshed) {
+        throw new Error('Label saved, but the latest labels could not be loaded. Use Retry to refresh.')
+      }
+      return true
     } catch (requestError) {
       throw new Error(getApiErrorDetails(requestError).message, {
         cause: requestError,
@@ -229,7 +258,11 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
       } else {
         await removeLabelFromNote(noteId, labelId)
       }
-      await refreshNotes()
+      const refreshed = await refreshNotes()
+      if (!refreshed) {
+        throw new Error('Label updated, but the latest notes could not be loaded. Use Try again to refresh.')
+      }
+      return true
     } catch (requestError) {
       throw new Error(getApiErrorDetails(requestError).message, {
         cause: requestError,
@@ -252,9 +285,15 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
       delete: deleteNote,
     }
 
+    setSuccessMessage('')
+
     try {
       await actions[actionName](note.id)
-      await refreshNotes()
+      const refreshed = await refreshNotes()
+      if (!refreshed) {
+        throw new Error('Note updated, but the latest notes could not be loaded. Use Try again to refresh.')
+      }
+
       const successMessages = {
         pin: 'Note pinned',
         unpin: 'Note unpinned',
@@ -273,11 +312,17 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
   }
 
   const handleCreate = async (noteData) => {
+    setSuccessMessage('')
+
     try {
       await createNote(noteData)
       setCreating(false)
-      setSuccessMessage('Note created successfully')
-      await refreshNotes()
+      const refreshed = await refreshNotes()
+      if (refreshed) {
+        setSuccessMessage('Note created successfully')
+      } else {
+        setError('Note created, but the latest notes could not be loaded. Use Try again to refresh.')
+      }
     } catch (requestError) {
       throw new Error(getApiErrorDetails(requestError).message, {
         cause: requestError,
@@ -286,8 +331,9 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
   }
 
   const handleUpdated = async () => {
-    setSuccessMessage('Note updated successfully')
-    await refreshNotes()
+    setSuccessMessage('')
+    const refreshed = await refreshNotes()
+    if (refreshed) setSuccessMessage('Note updated successfully')
   }
 
   const viewName = activeView === 'Label' ? (selectedLabel?.name || 'Label') : activeView
@@ -340,7 +386,7 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
           setActiveView('Label')
         }}
         onManageLabels={() => setManagingLabels(true)}
-        onRetryLabels={() => setLabelsRetryKey((current) => current + 1)}
+        onRetryLabels={handleRetryLabels}
       />
       <section className="dashboard-content" aria-labelledby="notes-heading">
         <div className="dashboard-heading">
@@ -373,13 +419,18 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
             </p>
           </div>
           {activeView === 'Notes' && (
-            <button type="button" className="create-note-button" onClick={() => setCreating(true)}>
+            <button
+              type="button"
+              className="create-note-button"
+              onClick={() => setCreating(true)}
+              disabled={creating || savingNote}
+            >
               Create note
             </button>
           )}
         </div>
 
-        {successMessage && (
+        {successMessage && !error && (
           <p className="dashboard-success" role="status">{successMessage}</p>
         )}
 
@@ -431,21 +482,27 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
 
       {creating && (
         <div className="note-modal-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setCreating(false)
+          if (event.target === event.currentTarget && !savingNote) setCreating(false)
         }}>
           <section className="note-modal" role="dialog" aria-modal="true" aria-label="Create note">
-            <NoteEditor mode="create" onSave={handleCreate} onCancel={() => setCreating(false)} />
+            <NoteEditor
+              mode="create"
+              onSave={handleCreate}
+              onCancel={() => setCreating(false)}
+              onBusyChange={setSavingNote}
+            />
           </section>
         </div>
       )}
 
       {openNoteId !== null && (
         <NoteModal
+          key={openNoteId}
           noteId={openNoteId}
           labels={labels}
           labelsLoading={labelsLoading}
           labelsError={labelsError}
-          onRetryLabels={() => setLabelsRetryKey((current) => current + 1)}
+          onRetryLabels={handleRetryLabels}
           onLabelAction={handleNoteLabelAction}
           onClose={() => setOpenNoteId(null)}
           onUpdated={handleUpdated}
@@ -457,7 +514,7 @@ function DashboardPage({ searchQuery = '', onClearSearch }) {
           labels={labels}
           loading={labelsLoading}
           error={labelsError}
-          onRetry={() => setLabelsRetryKey((current) => current + 1)}
+          onRetry={handleRetryLabels}
           onCreate={(labelData) => handleLabelMutation(createLabel, labelData)}
           onUpdate={(labelId, labelData) => handleLabelMutation(updateLabel, labelId, labelData)}
           onDelete={(labelId) => handleLabelMutation(deleteLabel, labelId)}

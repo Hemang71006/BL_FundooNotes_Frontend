@@ -17,6 +17,7 @@ function PasswordInput({
   placeholder,
   autoComplete = 'current-password',
   maxLength,
+  disabled = false,
 }) {
   const [visible, setVisible] = useState(false)
 
@@ -33,6 +34,7 @@ function PasswordInput({
           placeholder={placeholder}
           autoComplete={autoComplete}
           maxLength={maxLength}
+          disabled={disabled}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${id}-error` : undefined}
         />
@@ -40,6 +42,7 @@ function PasswordInput({
           type="button"
           className="password-toggle"
           onClick={() => setVisible((current) => !current)}
+          disabled={disabled}
           aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
         >
           {visible ? 'Hide' : 'Show'}

@@ -51,7 +51,7 @@ function Sidebar({
         {labelsError && (
           <div className="sidebar-label-error" role="alert">
             <span>{labelsError}</span>
-            <button type="button" onClick={onRetryLabels}>Retry</button>
+            <button type="button" onClick={onRetryLabels} disabled={labelsLoading}>Retry</button>
           </div>
         )}
         {!labelsLoading && !labelsError && labels.length === 0 && (

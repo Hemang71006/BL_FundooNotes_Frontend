@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { getApiErrorDetails } from '../utils/apiError'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 
 /*
  * Project: Fundoo Notes Frontend
@@ -11,7 +13,8 @@ import { useState } from 'react'
 const TITLE_LIMIT = 255
 const DESCRIPTION_LIMIT = 5000
 
-function NoteEditor({ mode = 'create', note, onSave, onCancel }) {
+function NoteEditor({ mode = 'create', note, onSave, onCancel, onBusyChange }) {
+  const guard = useSubmitGuard()
   const [title, setTitle] = useState(mode === 'edit' ? note?.title || '' : '')
   const [description, setDescription] = useState(mode === 'edit' ? note?.description || '' : '')
   const [errors, setErrors] = useState({})
@@ -41,16 +44,31 @@ function NoteEditor({ mode = 'create', note, onSave, onCancel }) {
 
     if (!validate() || saving) return
 
+    const requestId = guard.begin()
+    if (requestId === null) return
+
     setSaving(true)
+    onBusyChange?.(true)
+
     try {
       await onSave({
         title: title.trim(),
         description: description.trim(),
       })
     } catch (error) {
-      setApiError(error.message || 'Unable to save the note.')
+      if (!guard.isCurrent(requestId)) return
+      const details = getApiErrorDetails(error)
+      setApiError(details.message)
+      setErrors((current) => ({
+        ...current,
+        ...details.validationErrors,
+      }))
     } finally {
-      setSaving(false)
+      if (guard.isCurrent(requestId)) {
+        setSaving(false)
+        onBusyChange?.(false)
+      }
+      guard.end(requestId)
     }
   }
 
@@ -58,7 +76,13 @@ function NoteEditor({ mode = 'create', note, onSave, onCancel }) {
     <form className="note-editor" onSubmit={handleSubmit} noValidate>
       <div className="note-editor-heading">
         <h2>{mode === 'edit' ? 'Edit note' : 'Create note'}</h2>
-        <button type="button" className="modal-close" onClick={onCancel} aria-label="Close editor">
+        <button
+          type="button"
+          className="modal-close"
+          onClick={onCancel}
+          disabled={saving}
+          aria-label="Close editor"
+        >
           Close
         </button>
       </div>
@@ -68,7 +92,11 @@ function NoteEditor({ mode = 'create', note, onSave, onCancel }) {
         <input
           id="note-title"
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            setTitle(event.target.value)
+            setErrors((current) => ({ ...current, title: '' }))
+            setApiError('')
+          }}
           maxLength={TITLE_LIMIT}
           aria-invalid={Boolean(errors.title)}
           aria-describedby={errors.title ? 'note-title-error' : undefined}
@@ -84,7 +112,11 @@ function NoteEditor({ mode = 'create', note, onSave, onCancel }) {
         <textarea
           id="note-description"
           value={description}
-          onChange={(event) => setDescription(event.target.value)}
+          onChange={(event) => {
+            setDescription(event.target.value)
+            setErrors((current) => ({ ...current, description: '' }))
+            setApiError('')
+          }}
           maxLength={DESCRIPTION_LIMIT}
           aria-invalid={Boolean(errors.description)}
           aria-describedby={errors.description ? 'note-description-error' : undefined}

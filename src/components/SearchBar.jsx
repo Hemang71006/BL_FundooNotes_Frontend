@@ -26,7 +26,7 @@ function SearchBar({
         <button
           type="button"
           className="search-clear-button"
-          onClick={onClear}
+          onClick={() => onClear?.()}
           aria-label="Clear search"
           title="Clear search"
         >

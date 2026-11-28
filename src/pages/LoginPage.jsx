@@ -4,6 +4,7 @@ import PasswordInput from '../components/auth/PasswordInput'
 import AuthLayout from '../components/auth/AuthLayout'
 import { getApiErrorDetails } from '../utils/apiError'
 import { useAuth } from '../hooks/useAuth'
+import { useSubmitGuard } from '../hooks/useSubmitGuard'
 import { validateEmail } from '../utils/validators'
 
 /*
@@ -15,11 +16,11 @@ import { validateEmail } from '../utils/validators'
  */
 
 function LoginPage({ onNavigate }) {
-  const { login } = useAuth()
+  const { login, authNotice } = useAuth()
+  const guard = useSubmitGuard()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState({})
-  const [submitted, setSubmitted] = useState(false)
   const [apiError, setApiError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -38,26 +39,30 @@ function LoginPage({ onNavigate }) {
       return
     }
 
+    const requestId = guard.begin()
+    if (requestId === null) return
+
     setLoading(true)
 
     try {
-      const response = await login({
+      await login({
         email: email.trim(),
         password,
       })
-      setSubmitted(true)
-      setApiError(response.message || 'Login successful')
+
+      if (!guard.isCurrent(requestId)) return
       onNavigate('dashboard')
     } catch (error) {
+      if (!guard.isCurrent(requestId)) return
       const details = getApiErrorDetails(error)
-      setSubmitted(false)
       setApiError(details.message)
       setErrors((current) => ({
         ...current,
         ...details.validationErrors,
       }))
     } finally {
-      setLoading(false)
+      if (guard.isCurrent(requestId)) setLoading(false)
+      guard.end(requestId)
     }
   }
 
@@ -75,13 +80,14 @@ function LoginPage({ onNavigate }) {
           value={email}
           onChange={(value) => {
             setEmail(value)
-            setSubmitted(false)
+            setErrors((current) => ({ ...current, email: '' }))
             setApiError('')
           }}
           error={errors.email}
           placeholder="you@example.com"
           autoComplete="email"
           maxLength={100}
+          disabled={loading}
         />
 
         <PasswordInput
@@ -90,29 +96,27 @@ function LoginPage({ onNavigate }) {
           value={password}
           onChange={(value) => {
             setPassword(value)
-            setSubmitted(false)
+            setErrors((current) => ({ ...current, password: '' }))
             setApiError('')
           }}
           error={errors.password}
           placeholder="Enter your password"
           autoComplete="current-password"
+          disabled={loading}
         />
 
         <button
           type="button"
           className="auth-text-button auth-align-right"
           onClick={() => onNavigate('forgot-password')}
+          disabled={loading}
         >
           Forgot password?
         </button>
 
-        {submitted && (
-          <p className="auth-success" role="status">
-            {apiError}
-          </p>
+        {(authNotice || apiError) && (
+          <p className="auth-error" role="alert">{authNotice || apiError}</p>
         )}
-
-        {!submitted && apiError && <p className="auth-error" role="alert">{apiError}</p>}
 
         <button type="submit" className="auth-primary-button" disabled={loading}>
           {loading ? 'Logging in...' : 'Log in'}
@@ -121,7 +125,13 @@ function LoginPage({ onNavigate }) {
 
       <p className="auth-link-copy">
         New to Fundoo Notes?{' '}
-        <button type="button" onClick={() => onNavigate('register')}>Create account</button>
+        <button
+          type="button"
+          onClick={() => onNavigate('register')}
+          disabled={loading}
+        >
+          Create account
+        </button>
       </p>
     </AuthLayout>
   )
