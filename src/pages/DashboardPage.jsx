@@ -9,6 +9,7 @@ import {
   archiveNote,
   createNote,
   deleteNote,
+  getAllNotes,
   pinNote,
   restoreNote,
   searchNotes,
@@ -27,6 +28,12 @@ import {
 import { getApiErrorDetails } from '../utils/apiError'
 
 function fetchNotesForView(view, selectedLabel, keyword = '') {
+  // The unfiltered Notes dashboard uses the repaired Redis-backed list endpoint.
+  // Keyword, status and label filters remain on the dedicated search endpoint.
+  if (view === 'Notes' && !keyword && !selectedLabel) {
+    return getAllNotes()
+  }
+
   const status = view === 'Pinned'
     ? 'PINNED'
     : view === 'Archive'
